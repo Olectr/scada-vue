@@ -69,7 +69,7 @@ function makeEl(type) {
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2 })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true })
     case 'gauge': return new PGauge({ position: { x, y }, value: 4, simMin: 0, simMax: 8 })
-    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100 })
+    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [] })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
   }
 }
@@ -79,6 +79,7 @@ const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
   isPump: false, isValve: false, isControl: false,
   simMin: 0, simMax: 8, on: false, open: false, pct: 100,
+  targets: [], targetOptions: [],
 })
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
@@ -92,6 +93,13 @@ function selectEl(model) {
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 95)
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
+  if (t === 's.Control') {
+    sel.targets = (model.get('targets') || []).slice()
+    // pumps and valves are the components a control can open/close
+    sel.targetOptions = graph.getElements()
+      .filter(e => e.id !== model.id && (e.get('type') === 's.Pump' || e.get('type') === 's.Valve'))
+      .map(e => ({ id: e.id, name: e.attr('name/text') || e.get('type') }))
+  } else { sel.targets = []; sel.targetOptions = [] }
 }
 function applyName() { const m = selModel(); if (m) m.attr('name/text', sel.name) }
 function applyRange() {
@@ -102,9 +110,42 @@ function applyRange() {
 }
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
-function applyPct() { const m = selModel(); if (m) { m.set('pct', Number(sel.pct)); if (mode.value !== 'run') control0(m) } }
+function applyPct() {
+  const m = selModel(); if (!m) return
+  m.set('pct', Number(sel.pct))
+  if (mode.value === 'run') simulateTick(graph); else control0(m) // refresh bar + linked-pipe speed
+}
 function control0(m) { m.attr('barFill/width', (m.size().width - 16) * (Number(sel.pct)) / 100); m.attr('val/text', Number(sel.pct) > 0 ? Number(sel.pct) + '% open' : 'Closed') }
 function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
+
+// reflect a pump/valve's on/open state on the canvas immediately (without a full sim drift)
+function applyTargetVisual(t) {
+  const ty = t.get('type')
+  if (ty === 's.Pump') { t.attr('imp/class', t.get('on') ? 'wp-spin' : ''); t.attr('inner/fill', t.get('on') ? '#5fb98f' : '#8b949e') }
+  else if (ty === 's.Valve') { t.attr('ind/fill', t.get('open') ? '#16a34a' : '#cbd5e1') }
+}
+// Control links: check/uncheck a target component
+function toggleTarget(id, checked) {
+  const m = selModel(); if (!m) return
+  let ts = (m.get('targets') || []).slice()
+  if (checked) { if (!ts.includes(id)) ts.push(id) } else { ts = ts.filter(x => x !== id) }
+  m.set('targets', ts); sel.targets = ts
+  if (mode.value === 'run') simulateTick(graph)
+}
+// Open/Close every linked pump (on/off) and valve (open/closed)
+function driveTargets(open) {
+  const m = selModel(); if (!m) return
+  ;(m.get('targets') || []).forEach(id => {
+    const t = graph.getCell(id); if (!t) return
+    const ty = t.get('type')
+    if (ty === 's.Pump') t.set('on', open)
+    else if (ty === 's.Valve') t.set('open', open)
+    applyTargetVisual(t)
+  })
+  if (mode.value === 'run') simulateTick(graph)
+}
+function controlOpen() { driveTargets(true) }
+function controlClose() { driveTargets(false) }
 
 function fit() {
   if (!fitEl.value || !paper) return
@@ -210,10 +251,23 @@ onUnmounted(() => {
           <label v-if="sel.isValve" class="chk">
             <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> Open
           </label>
-          <label v-if="sel.isControl">Open %
-            <input type="range" min="0" max="100" v-model="sel.pct" @input="applyPct">
-            <span class="pctval">{{ sel.pct }}%</span>
-          </label>
+          <template v-if="sel.isControl">
+            <label>Open %
+              <input type="range" min="0" max="100" v-model="sel.pct" @input="applyPct">
+              <span class="pctval">{{ sel.pct }}%</span>
+            </label>
+            <div class="ctrlbtns">
+              <button class="open" @click="controlOpen">Open</button>
+              <button class="close" @click="controlClose">Close</button>
+            </div>
+            <div class="targets">
+              <div class="tlabel">Controls (linked):</div>
+              <div v-if="!sel.targetOptions.length" class="empty">Add pumps/valves to link.</div>
+              <label v-for="o in sel.targetOptions" :key="o.id" class="chk">
+                <input type="checkbox" :checked="sel.targets.includes(o.id)" @change="toggleTarget(o.id, $event.target.checked)"> {{ o.name }}
+              </label>
+            </div>
+          </template>
           <button class="del" @click="deleteSel">🗑 Delete</button>
         </div>
       </aside>
@@ -245,6 +299,13 @@ onUnmounted(() => {
 .pctval { font-size: 11px; color: #2563eb; }
 .del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
 .loadsel { font-size: 12px; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 8px; background: #fff; color: #475569; }
+.ctrlbtns { display: flex; gap: 6px; }
+.ctrlbtns button { flex: 1; font-size: 12px; font-weight: 600; border-radius: 5px; padding: 5px; cursor: pointer; border: 1px solid #cbd5e1; }
+.ctrlbtns .open { background: #16a34a; color: #fff; border-color: #16a34a; }
+.ctrlbtns .close { background: #e2e8f0; color: #475569; }
+.targets { border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.tlabel { font-size: 11px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: .03em; }
+.targets label.chk { font-weight: 500; }
 </style>
 
 <style>

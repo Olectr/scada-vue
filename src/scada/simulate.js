@@ -38,8 +38,11 @@ function control(elm) {
   elm.attr('val/text', pct > 0 ? pct + '% open' : 'Closed')
 }
 
-function flowPipe(link, graph) {
-  const src = link.source() && link.source().id ? graph.getCell(link.source().id) : null
+// ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
+// A pipe whose source is a control-driven pump/valve runs at that control's speed.
+function flowPipe(link, graph, ctrlPct) {
+  const srcId = link.source() && link.source().id
+  const src = srcId ? graph.getCell(srcId) : null
   let live = false, pct = 100
   if (src) {
     const t = src.get('type')
@@ -48,9 +51,25 @@ function flowPipe(link, graph) {
     else if (t === 's.Control') { pct = src.get('pct') ?? 0; live = pct > 0 }
     else if (t === 's.Cyl' || t === 's.Hopper') live = (src.get('level') ?? 0) > 1
     else live = true // zone or anything else = always a source
+    // a Control linked to this source sets the flow speed (0% also stops it)
+    if (t !== 's.Control' && ctrlPct[srcId] != null) {
+      pct = ctrlPct[srcId]
+      if (pct <= 0) live = false
+    }
   }
   const dur = (0.35 + (1 - pct / 100) * 1.9).toFixed(2)
   link.attr('line', { opacity: live ? 1 : 0, class: live ? 'wp-flow wp-on' : 'wp-flow', style: { animationDuration: dur + 's' } })
+}
+
+// Build id -> driving-control-% map from every Control's `targets` list.
+function controlMap(graph) {
+  const m = {}
+  graph.getElements().forEach(elm => {
+    if (elm.get('type') !== 's.Control') return
+    const pct = clamp(elm.get('pct') ?? 100, 0, 100)
+    ;(elm.get('targets') || []).forEach(id => { m[id] = pct })
+  })
+  return m
 }
 
 export function simulateTick(graph) {
@@ -64,5 +83,6 @@ export function simulateTick(graph) {
       case 's.Control': control(elm); break
     }
   })
-  graph.getLinks().forEach(link => flowPipe(link, graph))
+  const ctrlPct = controlMap(graph)
+  graph.getLinks().forEach(link => flowPipe(link, graph, ctrlPct))
 }
