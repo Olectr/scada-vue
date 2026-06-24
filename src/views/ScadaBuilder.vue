@@ -165,6 +165,34 @@ function driveTargets(open) {
 function controlOpen() { driveTargets(true) }
 function controlClose() { driveTargets(false) }
 
+// --- on-canvas control overlays (slider + open/close, like the reference demo) ---
+const controlsUi = ref([])
+function syncControls() {
+  if (!graph) return
+  controlsUi.value = graph.getElements()
+    .filter(e => e.get('type') === 's.Control')
+    .map(e => { const p = e.position(); return { id: e.id, x: p.x, y: p.y, pct: e.get('pct') ?? 100, name: e.attr('name/text') || 'Control' } })
+}
+// drag the on-canvas slider → set % live (bar + linked-pipe speed), no array rebuild mid-drag
+function onCtrlSlide(c, val) {
+  c.pct = Number(val)
+  const m = graph.getCell(c.id); if (!m) return
+  m.set('pct', c.pct); setControlBar(m); refreshLinks(graph)
+  if (sel.id === c.id) sel.pct = c.pct
+}
+// open/close every pump/valve linked to a given control
+function driveFor(id, open) {
+  const m = graph.getCell(id); if (!m) return
+  ;(m.get('targets') || []).forEach(tid => {
+    const t = graph.getCell(tid); if (!t) return
+    const ty = t.get('type')
+    if (ty === 's.Pump') t.set('on', open)
+    else if (ty === 's.Valve') t.set('open', open)
+    applyTargetVisual(t)
+  })
+  refreshLinks(graph)
+}
+
 function fit() {
   if (!fitEl.value || !paper) return
   const cw = fitEl.value.clientWidth
@@ -204,6 +232,9 @@ onMounted(() => {
 
   // a linked Control follows its target component when that component is dragged
   graph.on('change:position', followControls)
+  // keep on-canvas control overlays positioned + in sync
+  graph.on('add remove change:position', syncControls)
+  syncControls()
 
   fit()
   onResize = fit
@@ -218,7 +249,7 @@ watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
-  if (graph) graph.off('change:position', followControls)
+  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncControls) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
   if (paper) paper.remove()
@@ -251,6 +282,15 @@ onUnmounted(() => {
       </aside>
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
+        <!-- on-canvas control panels: slider (increase/decrease %) + open/close -->
+        <div v-for="c in controlsUi" :key="c.id" class="cov" :style="{ left: (c.x * scale) + 'px', top: ((c.y + 60) * scale) + 'px' }">
+          <input type="range" min="0" max="100" :value="c.pct" @input="onCtrlSlide(c, $event.target.value)">
+          <div class="covval">{{ c.pct }}% open</div>
+          <div class="covbtns">
+            <button class="open" @click="driveFor(c.id, true)">open</button>
+            <button class="close" @click="driveFor(c.id, false)">close</button>
+          </div>
+        </div>
       </div>
       <aside class="inspector">
         <div class="ptitle">Inspector</div>
@@ -317,6 +357,13 @@ onUnmounted(() => {
 .ico { width: 18px; text-align: center; }
 .fit { position: relative; flex: 1; height: 70vh; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
 .paper { position: absolute; top: 0; left: 0; }
+.cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; }
+.cov input[type=range] { width: 100%; accent-color: #2563eb; }
+.cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
+.cov .covbtns { display: flex; gap: 4px; }
+.cov .covbtns button { flex: 1; font-size: 11px; font-weight: 600; border: none; border-radius: 4px; padding: 3px 0; cursor: pointer; background: #e2e8f0; color: #475569; }
+.cov .covbtns .open { background: #16a34a; color: #fff; }
+.cov .covbtns .close { background: #e2e8f0; color: #475569; }
 .fields { display: flex; flex-direction: column; gap: 10px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; font-weight: 600; }
 .fields label.chk { flex-direction: row; align-items: center; gap: 6px; }
