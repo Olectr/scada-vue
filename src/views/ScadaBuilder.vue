@@ -121,6 +121,7 @@ function applyPct() {
   // bar + linked-pipe speed only — never the full sim tick (would drift on every input event)
   setControlBar(m); refreshLinks(graph)
 }
+function stepPct(d) { sel.pct = Math.max(0, Math.min(100, Number(sel.pct) + d)); applyPct() }
 function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
 
 // reflect a pump/valve's on/open state on the canvas immediately (without a full sim drift)
@@ -188,6 +189,19 @@ onMounted(() => {
     selectEl(view.model)
   })
   paper.on('blank:pointerclick', () => { if (mode.value === 'edit') selectEl(null) })
+
+  // a linked Control follows its target component when that component is dragged
+  graph.on('change:position', (cell, position, opt) => {
+    if (opt && opt.controlFollow) return // ignore our own programmatic move (no cascade)
+    const prev = cell.previous('position'); if (!prev) return
+    const dx = position.x - prev.x, dy = position.y - prev.y
+    if (!dx && !dy) return
+    graph.getElements().forEach(e => {
+      if (e.get('type') === 's.Control' && (e.get('targets') || []).includes(cell.id)) {
+        e.translate(dx, dy, { controlFollow: true })
+      }
+    })
+  })
 
   fit()
   onResize = fit
@@ -259,8 +273,12 @@ onUnmounted(() => {
           <template v-if="sel.isControl">
             <label>Open %
               <input type="range" min="0" max="100" v-model="sel.pct" @input="applyPct">
-              <span class="pctval">{{ sel.pct }}%</span>
             </label>
+            <div class="pctstep">
+              <button @click="stepPct(-10)">−</button>
+              <span class="pctval">{{ sel.pct }}%</span>
+              <button @click="stepPct(10)">+</button>
+            </div>
             <div class="ctrlbtns">
               <button class="open" @click="controlOpen">Open</button>
               <button class="close" @click="controlClose">Close</button>
@@ -304,6 +322,9 @@ onUnmounted(() => {
 .pctval { font-size: 11px; color: #2563eb; }
 .del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
 .loadsel { font-size: 12px; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 8px; background: #fff; color: #475569; }
+.pctstep { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pctstep button { width: 30px; height: 26px; font-size: 16px; font-weight: 700; line-height: 1; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #2563eb; cursor: pointer; }
+.pctstep .pctval { font-size: 13px; font-weight: 700; color: #2563eb; }
 .ctrlbtns { display: flex; gap: 6px; }
 .ctrlbtns button { flex: 1; font-size: 12px; font-weight: 600; border-radius: 5px; padding: 5px; cursor: pointer; border: 1px solid #cbd5e1; }
 .ctrlbtns .open { background: #16a34a; color: #fff; border-color: #16a34a; }
