@@ -11,6 +11,43 @@ const STAGE_W = 1500, STAGE_H = 660
 const mode = ref('edit') // 'edit' | 'run'
 let paper = null, graph = null, fitRO = null, onResize = null, simTimer = null
 
+const LS_KEY = 'scada.builder.layouts'
+const names = ref([])
+const currentName = ref('')
+function loadIndex() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} } }
+function refreshNames() { names.value = Object.keys(loadIndex()) }
+function saveLayout() {
+  const name = (prompt('Save layout as:', currentName.value || 'My SCADA') || '').trim()
+  if (!name) return
+  const idx = loadIndex(); idx[name] = graph.toJSON()
+  localStorage.setItem(LS_KEY, JSON.stringify(idx))
+  currentName.value = name; refreshNames()
+}
+function loadLayout(name) {
+  if (!name) return
+  const idx = loadIndex(); if (!idx[name]) return
+  mode.value = 'edit'
+  graph.fromJSON(idx[name])
+  // keep auto-naming from colliding with loaded names
+  graph.getElements().forEach(el => {
+    const txt = el.attr && el.attr('name/text')
+    if (txt) { const m = /^(.*?)\s+(\d+)$/.exec(txt); if (m) counters[m[1]] = Math.max(counters[m[1]] || 0, Number(m[2])) }
+  })
+  currentName.value = name; selectEl(null)
+}
+function deleteLayout() {
+  if (!currentName.value) return
+  if (!confirm(`Delete layout "${currentName.value}"?`)) return
+  const idx = loadIndex(); delete idx[currentName.value]
+  localStorage.setItem(LS_KEY, JSON.stringify(idx))
+  currentName.value = ''; refreshNames()
+}
+function newLayout() {
+  if (!confirm('Clear the canvas and start a new layout?')) return
+  mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
+  for (const k in counters) delete counters[k]
+}
+
 const palette = [
   { type: 'tank', label: 'Tank', ico: '🛢' },
   { type: 'hopper', label: 'Hopper', ico: '⏏' },
@@ -104,6 +141,7 @@ onMounted(() => {
   onResize = fit
   fitRO = new ResizeObserver(fit); fitRO.observe(fitEl.value)
   window.addEventListener('resize', onResize)
+  refreshNames()
 })
 
 function startSim() { stopSim(); simulateTick(graph); simTimer = setInterval(() => simulateTick(graph), 1000) }
@@ -123,6 +161,13 @@ onUnmounted(() => {
   <div class="builder">
     <div class="toolbar">
       <strong>SCADA Builder</strong>
+      <button @click="newLayout">＋ New</button>
+      <button @click="saveLayout">💾 Save</button>
+      <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)">
+        <option value="">Load…</option>
+        <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
+      </select>
+      <button :disabled="!currentName" @click="deleteLayout">🗑 Delete</button>
       <span class="sp"></span>
       <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
       <button :class="{ on: mode === 'run' }" @click="mode = 'run'">▶ Run</button>
@@ -193,6 +238,7 @@ onUnmounted(() => {
 .fields input[type=range] { accent-color: #2563eb; }
 .pctval { font-size: 11px; color: #2563eb; }
 .del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
+.loadsel { font-size: 12px; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 8px; background: #fff; color: #475569; }
 </style>
 
 <style>
