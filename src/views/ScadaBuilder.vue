@@ -9,7 +9,7 @@ const fitEl = ref(null)
 const scale = ref(1)
 const STAGE_W = 1500, STAGE_H = 660
 const mode = ref('edit') // 'edit' | 'run'
-let paper, graph, fitRO, onResize, simTimer = null
+let paper = null, graph = null, fitRO = null, onResize = null, simTimer = null
 
 const palette = [
   { type: 'tank', label: 'Tank', ico: '🛢' },
