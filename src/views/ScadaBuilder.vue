@@ -148,14 +148,14 @@ function updateSelInfo() {
   sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m) }
   if (m.get('type') === 's.Control') {
     sel.connections = (m.get('targets') || []).map(id => {
-      const t = graph.getCell(id); return t ? { id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
+      const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
     }).filter(Boolean)
   } else {
     sel.connections = graph.getConnectedLinks(m).map(l => {
       const s = l.source() && l.source().id, tg = l.target() && l.target().id
       const otherId = s === m.id ? tg : s
       const o = otherId ? graph.getCell(otherId) : null
-      return o ? { id: String(otherId), name: nameOf(o), value: elemValue(o), dir: s === m.id ? '→ to' : '← from' } : null
+      return o ? { key: String(l.id), id: String(otherId), name: nameOf(o), value: elemValue(o), dir: s === m.id ? '→ to' : '← from' } : null
     }).filter(Boolean)
   }
 }
@@ -270,7 +270,7 @@ function onCtrlSlide(c, val) {
   driveFor(c.id, c.pct > 0) // 0% closes linked components, >0% opens them
   if (sel.id === c.id) sel.pct = c.pct
 }
-function selectById(id) { selectEl(graph.getCell(id)) }
+function selectById(id) { if (graph) selectEl(graph.getCell(id)) }
 // drag the whole control panel (its header) to move the underlying element
 let cdrag = null
 function ctrlDragStart(e, c) {
@@ -361,8 +361,9 @@ onMounted(() => {
   paper.on('element:pointerclick', view => {
     if (mode.value === 'run') {
       const m = view.model, t = m.get('type')
+      if (t !== 's.Pump' && t !== 's.Valve') return
       if (t === 's.Pump') m.set('on', !m.get('on'))
-      else if (t === 's.Valve') m.set('open', !m.get('open'))
+      else m.set('open', !m.get('open'))
       simulateTick(graph)
       return
     }
@@ -389,6 +390,7 @@ watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
+  ctrlDragEnd() // drop any in-flight panel-drag window listeners
   if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
@@ -497,10 +499,10 @@ onUnmounted(() => {
               </label>
             </div>
           </template>
-          <div class="targets">
+          <div v-if="sel.type !== 's.Chart'" class="targets">
             <div class="tlabel">Connections:</div>
             <div v-if="!sel.connections.length" class="empty">Not connected.</div>
-            <div v-for="cn in sel.connections" :key="cn.dir + cn.id" class="conn">
+            <div v-for="cn in sel.connections" :key="cn.key" class="conn">
               <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b>{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
               <code class="iid" :title="cn.id">{{ cn.id }}</code>
             </div>

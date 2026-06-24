@@ -87,7 +87,7 @@ export const PGauge = joint.dia.Element.define('s.PG', { size: { width: 96, heig
 // New: control (builder). The visible widget is an HTML panel overlay (slider +
 // open/close); the element itself is an invisible data/anchor cell (position,
 // pct, targets, name) so there is exactly ONE control widget on screen.
-export const Control = joint.dia.Element.define('s.Control', { size: { width: 130, height: 96 }, attrs: {
+export const Control = joint.dia.Element.define('s.Control', { size: { width: 130, height: 120 }, attrs: {
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
