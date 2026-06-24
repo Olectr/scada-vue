@@ -503,7 +503,7 @@ onUnmounted(() => {
             <div class="tlabel">Connections:</div>
             <div v-if="!sel.connections.length" class="empty">Not connected.</div>
             <div v-for="cn in sel.connections" :key="cn.key" class="conn">
-              <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b>{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
+              <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b class="cname">{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
               <code class="iid" :title="cn.id">{{ cn.id }}</code>
             </div>
           </div>
@@ -515,20 +515,21 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.builder { width: 100%; }
+.builder { width: 100%; height: 100%; display: flex; flex-direction: column; }
 .toolbar { display: flex; align-items: center; gap: 8px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 12px; margin-bottom: 8px; font-size: 13px; color: #334155; }
 .toolbar .sp { flex: 1; }
 .toolbar button, .palette button { font-size: 12px; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 10px; background: #fff; color: #475569; cursor: pointer; }
 .toolbar button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
-.cols { display: flex; gap: 8px; }
-.palette, .inspector { width: 180px; flex: none; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; }
+.cols { display: flex; gap: 8px; flex: 1; min-height: 0; }
+.palette, .inspector { width: 180px; flex: none; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; overflow: auto; }
+.inspector { width: 220px; }
 .palette button { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 6px; text-align: left; }
 .palette button:disabled { opacity: .45; cursor: not-allowed; }
 .ptitle { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
 .hint { font-size: 11px; color: #64748b; margin-top: 10px; }
 .empty { font-size: 12px; color: #94a3b8; }
 .ico { width: 18px; text-align: center; }
-.fit { position: relative; flex: 1; height: 70vh; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
+.fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
 .paper { position: absolute; top: 0; left: 0; }
 /* the control panel IS the control; gaps are click-through, interactive parts + header capture pointer */
 .cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
@@ -564,11 +565,13 @@ onUnmounted(() => {
 .irow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: #64748b; }
 .irow b { color: #1f2d3d; }
 .ival { color: #2563eb !important; }
-.iid { font-size: 10px; color: #94a3b8; word-break: break-all; text-align: right; }
+.iid { display: block; flex: 1; min-width: 0; font-size: 10px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: right; }
+.conn .iid { text-align: left; }
 .conn { border: 1px solid #eef2f6; border-radius: 6px; padding: 5px 7px; }
 .crow { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #1f2d3d; }
 .cdir { font-size: 10px; font-weight: 700; color: #16a34a; white-space: nowrap; }
-.cval { margin-left: auto; font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
+.cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cval { font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
 </style>
 
 <style>
