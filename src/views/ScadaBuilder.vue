@@ -337,9 +337,9 @@ function fit() {
   if (!fitEl.value || !paper) return
   const cw = fitEl.value.clientWidth
   const ch = fitEl.value.clientHeight || (window.innerHeight * 0.7)
-  const s = Math.min(cw / STAGE_W, ch / STAGE_H)
+  const s = Math.min(cw / STAGE_W, ch / STAGE_H) // scale content to fit
   scale.value = s
-  paper.setDimensions(STAGE_W * s, STAGE_H * s)
+  paper.setDimensions(cw, ch)                    // white paper fills the whole board (extra = usable whiteboard)
   paper.scale(s)
 }
 
@@ -529,7 +529,7 @@ onUnmounted(() => {
 .hint { font-size: 11px; color: #64748b; margin-top: 10px; }
 .empty { font-size: 12px; color: #94a3b8; }
 .ico { width: 18px; text-align: center; }
-.fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
+.fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
 .paper { position: absolute; top: 0; left: 0; }
 /* the control panel IS the control; gaps are click-through, interactive parts + header capture pointer */
 .cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
