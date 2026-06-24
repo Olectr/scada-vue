@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, FlowPipe, portsCfg } from '../scada/shapes'
-import { simulateTick } from '../scada/simulate'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setControlBar } from '../scada/simulate'
 
 const host = ref(null)
 const fitEl = ref(null)
@@ -73,7 +73,12 @@ function makeEl(type) {
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
   }
 }
-function addComponent(type) { const el = makeEl(type); if (el) graph.addCell(el) }
+function addComponent(type) {
+  const el = makeEl(type); if (!el) return
+  graph.addCell(el)
+  // if a Control is open in the inspector, refresh its link checklist to include the new part
+  if (sel.isControl && (type === 'pump' || type === 'valve')) selectEl(selModel())
+}
 
 const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
@@ -113,16 +118,16 @@ function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.op
 function applyPct() {
   const m = selModel(); if (!m) return
   m.set('pct', Number(sel.pct))
-  if (mode.value === 'run') simulateTick(graph); else control0(m) // refresh bar + linked-pipe speed
+  // bar + linked-pipe speed only — never the full sim tick (would drift on every input event)
+  setControlBar(m); refreshLinks(graph)
 }
-function control0(m) { m.attr('barFill/width', (m.size().width - 16) * (Number(sel.pct)) / 100); m.attr('val/text', Number(sel.pct) > 0 ? Number(sel.pct) + '% open' : 'Closed') }
 function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
 
 // reflect a pump/valve's on/open state on the canvas immediately (without a full sim drift)
 function applyTargetVisual(t) {
   const ty = t.get('type')
-  if (ty === 's.Pump') { t.attr('imp/class', t.get('on') ? 'wp-spin' : ''); t.attr('inner/fill', t.get('on') ? '#5fb98f' : '#8b949e') }
-  else if (ty === 's.Valve') { t.attr('ind/fill', t.get('open') ? '#16a34a' : '#cbd5e1') }
+  if (ty === 's.Pump') setPumpVisual(t)
+  else if (ty === 's.Valve') setValveVisual(t)
 }
 // Control links: check/uncheck a target component
 function toggleTarget(id, checked) {
@@ -130,7 +135,7 @@ function toggleTarget(id, checked) {
   let ts = (m.get('targets') || []).slice()
   if (checked) { if (!ts.includes(id)) ts.push(id) } else { ts = ts.filter(x => x !== id) }
   m.set('targets', ts); sel.targets = ts
-  if (mode.value === 'run') simulateTick(graph)
+  refreshLinks(graph) // link set changed → re-evaluate driven-pipe speeds now
 }
 // Open/Close every linked pump (on/off) and valve (open/closed)
 function driveTargets(open) {
@@ -142,7 +147,7 @@ function driveTargets(open) {
     else if (ty === 's.Valve') t.set('open', open)
     applyTargetVisual(t)
   })
-  if (mode.value === 'run') simulateTick(graph)
+  refreshLinks(graph) // instant pipe feedback in both edit and run modes
 }
 function controlOpen() { driveTargets(true) }
 function controlClose() { driveTargets(false) }

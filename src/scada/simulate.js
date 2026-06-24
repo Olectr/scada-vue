@@ -12,15 +12,30 @@ function tank(elm, isHopper) {
   else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
 }
 
-function pump(elm) {
+// Visual-only helpers (no value drift) — shared so the builder's edit-mode
+// Open/Close and slider feedback render identically to the running sim.
+export function setPumpVisual(elm) {
   const on = !!elm.get('on')
   elm.attr('imp/class', on ? 'wp-spin' : '')
   elm.attr('inner/fill', on ? '#5fb98f' : '#8b949e')
+}
+export function setValveVisual(elm) {
+  elm.attr('ind/fill', elm.get('open') ? '#16a34a' : '#cbd5e1')
+}
+export function setControlBar(elm) {
+  const pct = clamp(elm.get('pct') ?? 100, 0, 100)
+  elm.attr('barFill/width', (elm.size().width - 16) * pct / 100)
+  elm.attr('val/text', pct > 0 ? pct + '% open' : 'Closed')
+}
+
+function pump(elm) {
+  const on = !!elm.get('on')
+  setPumpVisual(elm)
   elm.set('pressure', on ? drift(elm.get('pressure') || 2, 1.4, 3.4, 0.18) : 0, { silent: true })
 }
 
 function valve(elm) {
-  elm.attr('ind/fill', elm.get('open') ? '#16a34a' : '#cbd5e1')
+  setValveVisual(elm)
 }
 
 function gauge(elm) {
@@ -33,9 +48,7 @@ function gauge(elm) {
 }
 
 function control(elm) {
-  const pct = clamp(elm.get('pct') ?? 100, 0, 100)
-  elm.attr('barFill/width', (elm.size().width - 16) * pct / 100)
-  elm.attr('val/text', pct > 0 ? pct + '% open' : 'Closed')
+  setControlBar(elm)
 }
 
 // ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
@@ -48,7 +61,7 @@ function flowPipe(link, graph, ctrlPct) {
     const t = src.get('type')
     if (t === 's.Pump') live = !!src.get('on')
     else if (t === 's.Valve') live = !!src.get('open')
-    else if (t === 's.Control') { pct = src.get('pct') ?? 0; live = pct > 0 }
+    else if (t === 's.Control') { pct = clamp(src.get('pct') ?? 100, 0, 100); live = pct > 0 }
     else if (t === 's.Cyl' || t === 's.Hopper') live = (src.get('level') ?? 0) > 1
     else live = true // zone or anything else = always a source
     // a Control linked to this source sets the flow speed (0% also stops it)
@@ -70,6 +83,14 @@ function controlMap(graph) {
     ;(elm.get('targets') || []).forEach(id => { m[id] = pct })
   })
   return m
+}
+
+// Re-animate every pipe from current element state WITHOUT drifting values.
+// Used for instant feedback in edit mode (and on slider drag) so a 60Hz input
+// event never advances the tank/gauge simulation.
+export function refreshLinks(graph) {
+  const ctrlPct = controlMap(graph)
+  graph.getLinks().forEach(link => flowPipe(link, graph, ctrlPct))
 }
 
 export function simulateTick(graph) {
