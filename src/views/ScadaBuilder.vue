@@ -1,8 +1,10 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, FlowPipe, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, FlowPipe, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setControlBar } from '../scada/simulate'
+import { drift } from '../composables/usePlantData'
+import TrendChart from '../components/TrendChart.vue'
 
 const host = ref(null)
 const fitEl = ref(null)
@@ -33,7 +35,7 @@ function loadLayout(name) {
     const txt = el.attr && el.attr('name/text')
     if (txt) { const m = /^(.*?)\s+(\d+)$/.exec(txt); if (m) counters[m[1]] = Math.max(counters[m[1]] || 0, Number(m[2])) }
   })
-  currentName.value = name; selectEl(null); syncControls()
+  currentName.value = name; selectEl(null); syncOverlays()
 }
 function deleteLayout() {
   if (!currentName.value) return
@@ -56,6 +58,7 @@ const palette = [
   { type: 'gauge', label: 'Pressure Gauge', ico: 'Ⓟ' },
   { type: 'control', label: 'Control', ico: '🎚' },
   { type: 'zone', label: 'Zone', ico: '⚑' },
+  { type: 'chart', label: 'Chart', ico: '📈' },
 ]
 
 const counters = reactive({})
@@ -69,8 +72,9 @@ function makeEl(type) {
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2 })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true })
     case 'gauge': return new PGauge({ position: { x, y }, value: 4, simMin: 0, simMax: 8 })
-    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [] })
+    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
+    case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
   }
 }
 function addComponent(type) {
@@ -85,6 +89,7 @@ const sel = reactive({
   isPump: false, isValve: false, isControl: false,
   simMin: 0, simMax: 8, on: false, open: false, pct: 100,
   targets: [], targetOptions: [],
+  showSlider: true, showOpen: true, showClose: true,
 })
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
@@ -104,7 +109,16 @@ function selectEl(model) {
     sel.targetOptions = graph.getElements()
       .filter(e => e.id !== model.id && (e.get('type') === 's.Pump' || e.get('type') === 's.Valve'))
       .map(e => ({ id: e.id, name: e.attr('name/text') || e.get('type') }))
+    sel.showSlider = model.get('showSlider') !== false
+    sel.showOpen = model.get('showOpen') !== false
+    sel.showClose = model.get('showClose') !== false
   } else { sel.targets = []; sel.targetOptions = [] }
+}
+// which widgets show on this control's on-canvas panel
+function applyCtrlUi() {
+  const m = selModel(); if (!m) return
+  m.set('showSlider', sel.showSlider); m.set('showOpen', sel.showOpen); m.set('showClose', sel.showClose)
+  syncControls()
 }
 function applyName() { const m = selModel(); if (m) m.attr('name/text', sel.name) }
 function applyRange() {
@@ -120,6 +134,7 @@ function applyPct() {
   m.set('pct', Number(sel.pct))
   // bar + linked-pipe speed only — never the full sim tick (would drift on every input event)
   setControlBar(m); refreshLinks(graph)
+  driveFor(m.id, Number(sel.pct) > 0) // 0% closes linked components, >0% opens them
 }
 function stepPct(d) { sel.pct = Math.max(0, Math.min(100, Number(sel.pct) + d)); applyPct() }
 // linked Control follows its target component when dragged (named so it can be removed on unmount)
@@ -171,7 +186,13 @@ function syncControls() {
   if (!graph) return
   controlsUi.value = graph.getElements()
     .filter(e => e.get('type') === 's.Control')
-    .map(e => { const p = e.position(); return { id: e.id, x: p.x, y: p.y, pct: e.get('pct') ?? 100, name: e.attr('name/text') || 'Control' } })
+    .map(e => {
+      const p = e.position()
+      return {
+        id: e.id, x: p.x, y: p.y, pct: e.get('pct') ?? 100, name: e.attr('name/text') || 'Control',
+        showSlider: e.get('showSlider') !== false, showOpen: e.get('showOpen') !== false, showClose: e.get('showClose') !== false,
+      }
+    })
 }
 // drag the on-canvas slider → set % live (bar + linked-pipe speed), no array rebuild mid-drag
 function onCtrlSlide(c, val) {
@@ -179,6 +200,7 @@ function onCtrlSlide(c, val) {
   c.pct = Number(val)
   const m = graph.getCell(c.id); if (!m) return
   m.set('pct', c.pct); setControlBar(m); refreshLinks(graph)
+  driveFor(c.id, c.pct > 0) // 0% closes linked components, >0% opens them
   if (sel.id === c.id) sel.pct = c.pct
 }
 // open/close every pump/valve linked to a given control
@@ -194,6 +216,34 @@ function driveFor(id, open) {
   })
   refreshLinks(graph)
 }
+
+// --- on-canvas live charts (auto-simulated trend) ---
+const chartsUi = ref([])
+const chartData = reactive({}) // id -> number[]
+function seedChart(id) {
+  if (chartData[id]) return
+  let v = 50; const arr = []
+  for (let i = 0; i < 20; i++) { v = drift(v, 20, 90, 4); arr.push(Math.round(v)) }
+  chartData[id] = arr
+}
+function syncCharts() {
+  if (!graph) return
+  chartsUi.value = graph.getElements()
+    .filter(e => e.get('type') === 's.Chart')
+    .map(e => { const p = e.position(), s = e.size(); seedChart(e.id); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
+}
+function chartTick() {
+  if (!graph) return
+  graph.getElements().forEach(e => {
+    if (e.get('type') !== 's.Chart') return
+    const a = chartData[e.id] || []
+    const last = a.length ? a[a.length - 1] : 50
+    chartData[e.id] = [...a, Math.round(drift(last, 20, 90, 5))].slice(-30)
+  })
+}
+function seriesFor(id) { return [{ label: 'Value', color: '#2563eb', fill: 'rgba(37,99,235,.15)', data: chartData[id] || [] }] }
+// rebuild both overlay sets on any structural/position change
+function syncOverlays() { syncControls(); syncCharts() }
 
 function fit() {
   if (!fitEl.value || !paper) return
@@ -234,9 +284,9 @@ onMounted(() => {
 
   // a linked Control follows its target component when that component is dragged
   graph.on('change:position', followControls)
-  // keep on-canvas control overlays positioned + in sync
-  graph.on('add remove change:position', syncControls)
-  syncControls()
+  // keep on-canvas overlays (controls + charts) positioned + in sync
+  graph.on('add remove change:position', syncOverlays)
+  syncOverlays()
 
   fit()
   onResize = fit
@@ -245,13 +295,13 @@ onMounted(() => {
   refreshNames()
 })
 
-function startSim() { stopSim(); simulateTick(graph); simTimer = setInterval(() => simulateTick(graph), 1000) }
+function startSim() { stopSim(); simulateTick(graph); chartTick(); simTimer = setInterval(() => { simulateTick(graph); chartTick() }, 1000) }
 function stopSim() { if (simTimer) clearInterval(simTimer); simTimer = null }
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
-  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncControls) }
+  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
   if (paper) paper.remove()
@@ -284,14 +334,22 @@ onUnmounted(() => {
       </aside>
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
-        <!-- on-canvas control panels: slider (increase/decrease %) + open/close -->
-        <div v-for="c in controlsUi" :key="c.id" class="cov" :style="{ left: (c.x * scale) + 'px', top: ((c.y + 60) * scale) + 'px' }">
-          <input type="range" min="0" max="100" :value="c.pct" @input="onCtrlSlide(c, $event.target.value)">
-          <div class="covval">{{ c.pct }}% open</div>
-          <div class="covbtns">
-            <button class="open" @click="driveFor(c.id, true)">open</button>
-            <button class="close" @click="driveFor(c.id, false)">close</button>
+        <!-- on-canvas control panels: only the widgets the user enabled per control -->
+        <div v-for="c in controlsUi" :key="c.id" v-show="c.showSlider || c.showOpen || c.showClose"
+             class="cov" :style="{ left: (c.x * scale) + 'px', top: ((c.y + 60) * scale) + 'px' }">
+          <template v-if="c.showSlider">
+            <input type="range" min="0" max="100" :value="c.pct" @input="onCtrlSlide(c, $event.target.value)">
+            <div class="covval">{{ c.pct }}% open</div>
+          </template>
+          <div v-if="c.showOpen || c.showClose" class="covbtns">
+            <button v-if="c.showOpen" class="open" @click="driveFor(c.id, true)">open</button>
+            <button v-if="c.showClose" class="close" @click="driveFor(c.id, false)">close</button>
           </div>
+        </div>
+        <!-- on-canvas live charts -->
+        <div v-for="c in chartsUi" :key="c.id" class="chartov"
+             :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px', width: (c.w * scale) + 'px', height: (c.h * scale) + 'px' }">
+          <TrendChart :series="seriesFor(c.id)" style="width:100%;height:100%" />
         </div>
       </div>
       <aside class="inspector">
@@ -329,6 +387,12 @@ onUnmounted(() => {
               <button class="close" @click="controlClose">Close</button>
             </div>
             <div class="targets">
+              <div class="tlabel">Show on canvas:</div>
+              <label class="chk"><input type="checkbox" v-model="sel.showSlider" @change="applyCtrlUi"> Slider</label>
+              <label class="chk"><input type="checkbox" v-model="sel.showOpen" @change="applyCtrlUi"> Open button</label>
+              <label class="chk"><input type="checkbox" v-model="sel.showClose" @change="applyCtrlUi"> Close button</label>
+            </div>
+            <div class="targets">
               <div class="tlabel">Controls (linked):</div>
               <div v-if="!sel.targetOptions.length" class="empty">Add pumps/valves to link.</div>
               <label v-for="o in sel.targetOptions" :key="o.id" class="chk">
@@ -362,6 +426,7 @@ onUnmounted(() => {
 /* panel itself is click-through so it never blocks dragging the control underneath; only its controls capture pointer */
 .cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
 .cov input, .cov button { pointer-events: auto; }
+.chartov { position: absolute; pointer-events: none; padding: 6px; box-sizing: border-box; }
 .cov input[type=range] { width: 100%; accent-color: #2563eb; }
 .cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
 .cov .covbtns { display: flex; gap: 4px; }

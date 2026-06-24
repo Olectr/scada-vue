@@ -93,6 +93,12 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 12
   val: { x: 'calc(w/2)', y: 50, textAnchor: 'middle', fill: '#2563eb', fontSize: 10 },
 } }, { markup: svg`<rect @selector="box"/><text @selector="name"/><rect @selector="bar"/><rect @selector="barFill"/><text @selector="val"/>` })
 
+// New: chart frame element (builder). A live trend chart (HTML overlay) is drawn on top.
+export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, height: 180 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1 },
+  name: { x: 'calc(w/2)', y: -8, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
+
 // New: flow pipe link — grey tube + green dashed flow in one interactive link.
 export const FlowPipe = joint.dia.Link.define('s.FlowPipe', {
   z: -2,
@@ -119,5 +125,6 @@ Object.assign(joint.shapes.s, {
   Zone,
   PG: PGauge,
   Control,
+  Chart,
   FlowPipe,
 })
