@@ -94,7 +94,12 @@ function selectEl(model) {
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
 }
 function applyName() { const m = selModel(); if (m) m.attr('name/text', sel.name) }
-function applyRange() { const m = selModel(); if (m) { m.set('simMin', Number(sel.simMin)); m.set('simMax', Number(sel.simMax)) } }
+function applyRange() {
+  const m = selModel(); if (!m) return
+  const lo = Number(sel.simMin), hi = Number(sel.simMax)
+  if (!Number.isNaN(lo)) m.set('simMin', lo)
+  if (!Number.isNaN(hi)) m.set('simMax', hi)
+}
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
 function applyPct() { const m = selModel(); if (m) { m.set('pct', Number(sel.pct)); if (mode.value !== 'run') control0(m) } }
@@ -131,6 +136,7 @@ onMounted(() => {
       const m = view.model, t = m.get('type')
       if (t === 's.Pump') m.set('on', !m.get('on'))
       else if (t === 's.Valve') m.set('open', !m.get('open'))
+      simulateTick(graph)
       return
     }
     selectEl(view.model)

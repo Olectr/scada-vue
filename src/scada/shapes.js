@@ -106,3 +106,18 @@ export const FlowPipe = joint.dia.Link.define('s.FlowPipe', {
   { tagName: 'path', selector: 'wrap', attributes: { fill: 'none' } },
   { tagName: 'path', selector: 'line', attributes: { fill: 'none' } },
 ] })
+
+// define() only auto-registers into joint.shapes when a *global* `joint` exists (UMD builds).
+// Under ESM (Vite) there is no global, so register manually by the type-string leaf so that
+// graph.fromJSON() can resolve these types via `cellNamespace: joint.shapes`.
+joint.shapes.s = joint.shapes.s || {}
+Object.assign(joint.shapes.s, {
+  Cyl: CylTank,
+  Hopper,
+  Pump,
+  Valve,
+  Zone,
+  PG: PGauge,
+  Control,
+  FlowPipe,
+})
