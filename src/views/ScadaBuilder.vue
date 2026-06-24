@@ -30,11 +30,7 @@ function loadLayout(name) {
   const idx = loadIndex(); if (!idx[name]) return
   mode.value = 'edit'
   graph.fromJSON(idx[name])
-  // keep auto-naming from colliding with loaded names
-  graph.getElements().forEach(el => {
-    const txt = el.attr && el.attr('name/text')
-    if (txt) { const m = /^(.*?)\s+(\d+)$/.exec(txt); if (m) counters[m[1]] = Math.max(counters[m[1]] || 0, Number(m[2])) }
-  })
+  reseedCounters() // keep auto-naming from colliding with loaded names
   currentName.value = name; selectEl(null); syncOverlays()
 }
 function deleteLayout() {
@@ -48,6 +44,47 @@ function newLayout() {
   if (!confirm('Clear the canvas and start a new layout?')) return
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
+}
+
+// reseed auto-name counters from element names so new parts don't collide after a load/import
+function reseedCounters() {
+  graph.getElements().forEach(el => {
+    const txt = el.attr && el.attr('name/text')
+    if (txt) { const m = /^(.*?)\s+(\d+)$/.exec(txt); if (m) counters[m[1]] = Math.max(counters[m[1]] || 0, Number(m[2])) }
+  })
+}
+
+// --- portable JSON (export to / import from another project) ---
+const fileInput = ref(null)
+function exportJson() {
+  if (!graph) return
+  const env = { app: 'scada-builder', version: 1, name: currentName.value || 'scada', graph: graph.toJSON() }
+  const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = env.name.replace(/\s+/g, '_') + '.scada.json'
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+}
+function pickImport() { if (fileInput.value) fileInput.value.click() }
+function importJson(e) {
+  const f = e.target.files && e.target.files[0]
+  e.target.value = '' // allow re-importing the same file later
+  if (!f || !graph) return
+  const r = new FileReader()
+  r.onload = () => {
+    let g
+    try { const env = JSON.parse(r.result); g = env && env.graph ? env.graph : env }
+    catch { alert('Invalid JSON file.'); return }
+    try {
+      mode.value = 'edit'
+      graph.fromJSON(g)
+      reseedCounters()
+      currentName.value = ''
+      selectEl(null); syncOverlays()
+    } catch { alert('This JSON is not a SCADA layout (could not rebuild the screen).') }
+  }
+  r.readAsText(f)
 }
 
 const palette = [
@@ -321,6 +358,9 @@ onUnmounted(() => {
         <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
       </select>
       <button :disabled="!currentName" @click="deleteLayout">🗑 Delete</button>
+      <button @click="exportJson">⬇ Export JSON</button>
+      <button @click="pickImport">⬆ Import JSON</button>
+      <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
       <span class="sp"></span>
       <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
       <button :class="{ on: mode === 'run' }" @click="mode = 'run'">▶ Run</button>
