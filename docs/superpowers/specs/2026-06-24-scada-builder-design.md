@@ -113,6 +113,19 @@ Modes:
 - Undo/redo, multi-select, copy-paste, alignment guides.
 - Multiple pages / tabs per layout.
 
+## Addendum (2026-06-24) — Control links
+
+The Control component drives other components:
+- Inspector shows a checklist of all pumps/valves; checking sets the control's
+  `targets` (array of element ids), persisted via `toJSON`.
+- **Open / Close** buttons set every linked pump `on` and valve `open` true/false.
+- The **% slider** sets the flow speed of pipes whose source is a linked
+  component; `0%` stops that flow.
+- Edit-mode feedback is instant via `refreshLinks(graph)` (a links-only pass that
+  re-animates pipes from current state without advancing the value simulation).
+  Shared `setPumpVisual` / `setValveVisual` / `setControlBar` helpers keep
+  edit-mode rendering identical to the running sim.
+
 ## Success criteria
 
 1. New `✚ SCADA Builder` item appears in the sidebar and opens the builder.
