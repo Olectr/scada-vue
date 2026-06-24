@@ -33,7 +33,7 @@ function loadLayout(name) {
     const txt = el.attr && el.attr('name/text')
     if (txt) { const m = /^(.*?)\s+(\d+)$/.exec(txt); if (m) counters[m[1]] = Math.max(counters[m[1]] || 0, Number(m[2])) }
   })
-  currentName.value = name; selectEl(null)
+  currentName.value = name; selectEl(null); syncControls()
 }
 function deleteLayout() {
   if (!currentName.value) return
@@ -175,6 +175,7 @@ function syncControls() {
 }
 // drag the on-canvas slider → set % live (bar + linked-pipe speed), no array rebuild mid-drag
 function onCtrlSlide(c, val) {
+  if (!graph) return
   c.pct = Number(val)
   const m = graph.getCell(c.id); if (!m) return
   m.set('pct', c.pct); setControlBar(m); refreshLinks(graph)
@@ -182,6 +183,7 @@ function onCtrlSlide(c, val) {
 }
 // open/close every pump/valve linked to a given control
 function driveFor(id, open) {
+  if (!graph) return
   const m = graph.getCell(id); if (!m) return
   ;(m.get('targets') || []).forEach(tid => {
     const t = graph.getCell(tid); if (!t) return
@@ -357,7 +359,9 @@ onUnmounted(() => {
 .ico { width: 18px; text-align: center; }
 .fit { position: relative; flex: 1; height: 70vh; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
 .paper { position: absolute; top: 0; left: 0; }
-.cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; }
+/* panel itself is click-through so it never blocks dragging the control underneath; only its controls capture pointer */
+.cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
+.cov input, .cov button { pointer-events: auto; }
 .cov input[type=range] { width: 100%; accent-color: #2563eb; }
 .cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
 .cov .covbtns { display: flex; gap: 4px; }
