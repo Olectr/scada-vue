@@ -165,20 +165,18 @@ function toggleTarget(id, checked) {
   m.set('targets', ts); sel.targets = ts
   refreshLinks(graph) // link set changed → re-evaluate driven-pipe speeds now
 }
-// Open/Close every linked pump (on/off) and valve (open/closed)
-function driveTargets(open) {
-  const m = selModel(); if (!m) return
-  ;(m.get('targets') || []).forEach(id => {
-    const t = graph.getCell(id); if (!t) return
-    const ty = t.get('type')
-    if (ty === 's.Pump') t.set('on', open)
-    else if (ty === 's.Valve') t.set('open', open)
-    applyTargetVisual(t)
-  })
-  refreshLinks(graph) // instant pipe feedback in both edit and run modes
+// Open/Close a control: set its % to 100/0, drive linked components, sync bar + UI.
+// Keeping pct in step with the buttons means the 0%-auto-close rule never fights them.
+function setOpenClose(id, open) {
+  if (!graph) return
+  const m = graph.getCell(id); if (!m) return
+  m.set('pct', open ? 100 : 0); setControlBar(m)
+  driveFor(id, open)
+  if (sel.id === id) sel.pct = open ? 100 : 0
+  syncControls()
 }
-function controlOpen() { driveTargets(true) }
-function controlClose() { driveTargets(false) }
+function controlOpen() { setOpenClose(sel.id, true) }
+function controlClose() { setOpenClose(sel.id, false) }
 
 // --- on-canvas control overlays (slider + open/close, like the reference demo) ---
 const controlsUi = ref([])
@@ -231,6 +229,9 @@ function syncCharts() {
   chartsUi.value = graph.getElements()
     .filter(e => e.get('type') === 's.Chart')
     .map(e => { const p = e.position(), s = e.size(); seedChart(e.id); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
+  // prune data buffers for charts that no longer exist (avoid unbounded growth)
+  const ids = new Set(chartsUi.value.map(c => c.id))
+  Object.keys(chartData).forEach(id => { if (!ids.has(id)) delete chartData[id] })
 }
 function chartTick() {
   if (!graph) return
@@ -342,8 +343,8 @@ onUnmounted(() => {
             <div class="covval">{{ c.pct }}% open</div>
           </template>
           <div v-if="c.showOpen || c.showClose" class="covbtns">
-            <button v-if="c.showOpen" class="open" @click="driveFor(c.id, true)">open</button>
-            <button v-if="c.showClose" class="close" @click="driveFor(c.id, false)">close</button>
+            <button v-if="c.showOpen" class="open" @click="setOpenClose(c.id, true)">open</button>
+            <button v-if="c.showClose" class="close" @click="setOpenClose(c.id, false)">close</button>
           </div>
         </div>
         <!-- on-canvas live charts -->

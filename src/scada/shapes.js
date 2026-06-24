@@ -96,7 +96,7 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 12
 // New: chart frame element (builder). A live trend chart (HTML overlay) is drawn on top.
 export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, height: 180 }, attrs: {
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1 },
-  name: { x: 'calc(w/2)', y: -8, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
+  name: { x: 'calc(w/2)', y: 'calc(h+16)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
 } }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
 
 // New: flow pipe link — grey tube + green dashed flow in one interactive link.
