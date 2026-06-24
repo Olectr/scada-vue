@@ -38,8 +38,31 @@ function makeEl(type) {
 }
 function addComponent(type) { const el = makeEl(type); if (el) graph.addCell(el) }
 
-const sel = reactive({ id: null }) // expanded in Task 4
-function selectEl(model) { sel.id = model ? model.id : null } // expanded in Task 4
+const sel = reactive({
+  id: null, type: null, name: '', hasName: false, hasRange: false,
+  isPump: false, isValve: false, isControl: false,
+  simMin: 0, simMax: 8, on: false, open: false, pct: 100,
+})
+function selModel() { return sel.id ? graph.getCell(sel.id) : null }
+function selectEl(model) {
+  if (!model) { sel.id = null; sel.type = null; return }
+  const t = model.get('type')
+  sel.id = model.id; sel.type = t
+  sel.hasName = t !== 's.PG'
+  sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
+  sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
+  sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
+  sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
+  sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 95)
+  sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
+}
+function applyName() { const m = selModel(); if (m) m.attr('name/text', sel.name) }
+function applyRange() { const m = selModel(); if (m) { m.set('simMin', Number(sel.simMin)); m.set('simMax', Number(sel.simMax)) } }
+function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
+function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
+function applyPct() { const m = selModel(); if (m) { m.set('pct', Number(sel.pct)); if (mode.value !== 'run') control0(m) } }
+function control0(m) { m.attr('barFill/width', (m.size().width - 16) * (Number(sel.pct)) / 100); m.attr('val/text', Number(sel.pct) > 0 ? Number(sel.pct) + '% open' : 'Closed') }
+function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
 
 function fit() {
   if (!fitEl.value || !paper) return
@@ -117,7 +140,31 @@ onUnmounted(() => {
       </div>
       <aside class="inspector">
         <div class="ptitle">Inspector</div>
-        <div class="empty">Select a component.</div>
+        <div v-if="!sel.id" class="empty">Select a component.</div>
+        <div v-else class="fields">
+          <label v-if="sel.hasName">Name
+            <input type="text" v-model="sel.name" @input="applyName">
+          </label>
+          <template v-if="sel.hasRange">
+            <label>Sim min
+              <input type="number" v-model="sel.simMin" @input="applyRange">
+            </label>
+            <label>Sim max
+              <input type="number" v-model="sel.simMax" @input="applyRange">
+            </label>
+          </template>
+          <label v-if="sel.isPump" class="chk">
+            <input type="checkbox" v-model="sel.on" @change="togglePumpInit"> Running
+          </label>
+          <label v-if="sel.isValve" class="chk">
+            <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> Open
+          </label>
+          <label v-if="sel.isControl">Open %
+            <input type="range" min="0" max="100" v-model="sel.pct" @input="applyPct">
+            <span class="pctval">{{ sel.pct }}%</span>
+          </label>
+          <button class="del" @click="deleteSel">🗑 Delete</button>
+        </div>
       </aside>
     </div>
   </div>
@@ -139,6 +186,13 @@ onUnmounted(() => {
 .ico { width: 18px; text-align: center; }
 .fit { position: relative; flex: 1; height: 70vh; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
 .paper { position: absolute; top: 0; left: 0; }
+.fields { display: flex; flex-direction: column; gap: 10px; }
+.fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; font-weight: 600; }
+.fields label.chk { flex-direction: row; align-items: center; gap: 6px; }
+.fields input[type=text], .fields input[type=number] { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.fields input[type=range] { accent-color: #2563eb; }
+.pctval { font-size: 11px; color: #2563eb; }
+.del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
 </style>
 
 <style>
