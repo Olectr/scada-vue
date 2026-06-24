@@ -122,6 +122,18 @@ function applyPct() {
   setControlBar(m); refreshLinks(graph)
 }
 function stepPct(d) { sel.pct = Math.max(0, Math.min(100, Number(sel.pct) + d)); applyPct() }
+// linked Control follows its target component when dragged (named so it can be removed on unmount)
+function followControls(cell, position, opt) {
+  if (opt && opt.controlFollow) return // ignore our own programmatic move (no cascade)
+  const prev = cell.previous('position'); if (!prev) return
+  const dx = position.x - prev.x, dy = position.y - prev.y
+  if (!dx && !dy) return
+  graph.getElements().forEach(e => {
+    if (e.get('type') === 's.Control' && (e.get('targets') || []).includes(cell.id)) {
+      e.translate(dx, dy, { controlFollow: true })
+    }
+  })
+}
 function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
 
 // reflect a pump/valve's on/open state on the canvas immediately (without a full sim drift)
@@ -191,17 +203,7 @@ onMounted(() => {
   paper.on('blank:pointerclick', () => { if (mode.value === 'edit') selectEl(null) })
 
   // a linked Control follows its target component when that component is dragged
-  graph.on('change:position', (cell, position, opt) => {
-    if (opt && opt.controlFollow) return // ignore our own programmatic move (no cascade)
-    const prev = cell.previous('position'); if (!prev) return
-    const dx = position.x - prev.x, dy = position.y - prev.y
-    if (!dx && !dy) return
-    graph.getElements().forEach(e => {
-      if (e.get('type') === 's.Control' && (e.get('targets') || []).includes(cell.id)) {
-        e.translate(dx, dy, { controlFollow: true })
-      }
-    })
-  })
+  graph.on('change:position', followControls)
 
   fit()
   onResize = fit
@@ -216,6 +218,7 @@ watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
+  if (graph) graph.off('change:position', followControls)
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
   if (paper) paper.remove()
@@ -272,7 +275,7 @@ onUnmounted(() => {
           </label>
           <template v-if="sel.isControl">
             <label>Open %
-              <input type="range" min="0" max="100" v-model="sel.pct" @input="applyPct">
+              <input type="range" min="0" max="100" v-model.number="sel.pct" @input="applyPct">
             </label>
             <div class="pctstep">
               <button @click="stepPct(-10)">−</button>
