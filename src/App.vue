@@ -12,6 +12,7 @@ import HvacBms from './views/HvacBms.vue'
 import CompressedAir from './views/CompressedAir.vue'
 import WindPower from './views/WindPower.vue'
 import TankFarm from './views/TankFarm.vue'
+import ScadaBuilder from './views/ScadaBuilder.vue'
 
 const { state } = usePlantData()
 
@@ -27,6 +28,7 @@ const screens = [
   { id: 'air', ico: '💨', label: 'Compressed Air', title: 'Compressed Air System', comp: CompressedAir },
   { id: 'wind', ico: '🌬', label: 'Wind Power', title: 'Wind Power Plant', comp: WindPower },
   { id: 'farm', ico: '🛢', label: 'Tank Farm', title: 'Tank Farm / Storage', comp: TankFarm },
+  { id: 'builder', ico: '✚', label: 'SCADA Builder', title: 'SCADA Builder', comp: ScadaBuilder },
 ]
 const active = ref('kpi')
 const current = computed(() => screens.find(s => s.id === active.value))
