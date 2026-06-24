@@ -22,11 +22,6 @@ export function setPumpVisual(elm) {
 export function setValveVisual(elm) {
   elm.attr('ind/fill', elm.get('open') ? '#16a34a' : '#cbd5e1')
 }
-export function setControlBar(elm) {
-  const pct = clamp(elm.get('pct') ?? 100, 0, 100)
-  elm.attr('barFill/width', (elm.size().width - 16) * pct / 100)
-  elm.attr('val/text', pct > 0 ? pct + '% open' : 'Closed')
-}
 
 function pump(elm) {
   const on = !!elm.get('on')
@@ -45,10 +40,6 @@ function gauge(elm) {
   const frac = hi > lo ? (v - lo) / (hi - lo) : 0
   const col = frac > 0.85 ? '#dc2626' : '#16a34a'
   elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
-}
-
-function control(elm) {
-  setControlBar(elm)
 }
 
 // ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
@@ -101,7 +92,6 @@ export function simulateTick(graph) {
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm); break
-      case 's.Control': control(elm); break
     }
   })
   const ctrlPct = controlMap(graph)

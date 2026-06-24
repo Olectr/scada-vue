@@ -84,14 +84,12 @@ export const PGauge = joint.dia.Element.define('s.PG', { size: { width: 96, heig
   val: { x: 48, y: 70, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 24, fontWeight: 'bold' },
 } }, { markup: svg`<path @selector="bgArc"/><path @selector="fgArc"/><text @selector="unit">Ⓟ bar</text><text @selector="val"/>` })
 
-// New: control slider element (builder). pct 0..100 set via inspector.
-export const Control = joint.dia.Element.define('s.Control', { size: { width: 120, height: 54 }, attrs: {
-  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#fff', stroke: '#cbd5e1', strokeWidth: 1 },
-  name: { x: 'calc(w/2)', y: 17, textAnchor: 'middle', fill: '#334155', fontSize: 12, fontWeight: 'bold' },
-  bar: { x: 8, y: 30, width: 'calc(w-16)', height: 8, rx: 4, fill: '#e2e8f0' },
-  barFill: { x: 8, y: 30, width: 0, height: 8, rx: 4, fill: '#2563eb' },
-  val: { x: 'calc(w/2)', y: 50, textAnchor: 'middle', fill: '#2563eb', fontSize: 10 },
-} }, { markup: svg`<rect @selector="box"/><text @selector="name"/><rect @selector="bar"/><rect @selector="barFill"/><text @selector="val"/>` })
+// New: control (builder). The visible widget is an HTML panel overlay (slider +
+// open/close); the element itself is an invisible data/anchor cell (position,
+// pct, targets, name) so there is exactly ONE control widget on screen.
+export const Control = joint.dia.Element.define('s.Control', { size: { width: 130, height: 96 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
+} }, { markup: svg`<rect @selector="box"/>` })
 
 // New: chart frame element (builder). A live trend chart (HTML overlay) is drawn on top.
 export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, height: 180 }, attrs: {

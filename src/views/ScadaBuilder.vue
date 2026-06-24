@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, FlowPipe, portsCfg } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setControlBar } from '../scada/simulate'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual } from '../scada/simulate'
 import { drift } from '../composables/usePlantData'
 import TrendChart from '../components/TrendChart.vue'
 
@@ -127,10 +127,41 @@ const sel = reactive({
   simMin: 0, simMax: 8, on: false, open: false, pct: 100,
   targets: [], targetOptions: [],
   showSlider: true, showOpen: true, showClose: true,
+  info: null, connections: [],
 })
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart' }
+function elemValue(e) {
+  switch (e.get('type')) {
+    case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
+    case 's.Pump': return (e.get('on') ? 'ON' : 'OFF') + ' · ' + Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
+    case 's.Valve': return e.get('open') ? 'OPEN' : 'CLOSED'
+    case 's.PG': return Number(e.get('value') ?? 0).toFixed(1) + ' bar'
+    case 's.Control': return (e.get('pct') ?? 0) + '% open'
+    default: return '—'
+  }
+}
+function nameOf(e) { return (e.attr && e.attr('name/text')) || TYPE_LABEL[e.get('type')] || e.get('type') }
+// id / name / value of the selected element + everything connected to it
+function updateSelInfo() {
+  const m = selModel()
+  if (!m) { sel.info = null; sel.connections = []; return }
+  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m) }
+  if (m.get('type') === 's.Control') {
+    sel.connections = (m.get('targets') || []).map(id => {
+      const t = graph.getCell(id); return t ? { id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
+    }).filter(Boolean)
+  } else {
+    sel.connections = graph.getConnectedLinks(m).map(l => {
+      const s = l.source() && l.source().id, tg = l.target() && l.target().id
+      const otherId = s === m.id ? tg : s
+      const o = otherId ? graph.getCell(otherId) : null
+      return o ? { id: String(otherId), name: nameOf(o), value: elemValue(o), dir: s === m.id ? '→ to' : '← from' } : null
+    }).filter(Boolean)
+  }
+}
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
-  if (!model) { sel.id = null; sel.type = null; return }
+  if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
   sel.hasName = t !== 's.PG'
@@ -150,6 +181,7 @@ function selectEl(model) {
     sel.showOpen = model.get('showOpen') !== false
     sel.showClose = model.get('showClose') !== false
   } else { sel.targets = []; sel.targetOptions = [] }
+  updateSelInfo()
 }
 // which widgets show on this control's on-canvas panel
 function applyCtrlUi() {
@@ -169,9 +201,9 @@ function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.op
 function applyPct() {
   const m = selModel(); if (!m) return
   m.set('pct', Number(sel.pct))
-  // bar + linked-pipe speed only — never the full sim tick (would drift on every input event)
-  setControlBar(m); refreshLinks(graph)
+  refreshLinks(graph) // linked-pipe speed only — never the full sim tick (would drift on every input event)
   driveFor(m.id, Number(sel.pct) > 0) // 0% closes linked components, >0% opens them
+  syncControls() // refresh the on-canvas panel's % readout
 }
 function stepPct(d) { sel.pct = Math.max(0, Math.min(100, Number(sel.pct) + d)); applyPct() }
 // linked Control follows its target component when dragged (named so it can be removed on unmount)
@@ -207,7 +239,7 @@ function toggleTarget(id, checked) {
 function setOpenClose(id, open) {
   if (!graph) return
   const m = graph.getCell(id); if (!m) return
-  m.set('pct', open ? 100 : 0); setControlBar(m)
+  m.set('pct', open ? 100 : 0)
   driveFor(id, open)
   if (sel.id === id) sel.pct = open ? 100 : 0
   syncControls()
@@ -229,15 +261,33 @@ function syncControls() {
       }
     })
 }
-// drag the on-canvas slider → set % live (bar + linked-pipe speed), no array rebuild mid-drag
+// drag the on-canvas slider → set % live (linked-pipe speed), no array rebuild mid-drag
 function onCtrlSlide(c, val) {
   if (!graph) return
   c.pct = Number(val)
   const m = graph.getCell(c.id); if (!m) return
-  m.set('pct', c.pct); setControlBar(m); refreshLinks(graph)
+  m.set('pct', c.pct); refreshLinks(graph)
   driveFor(c.id, c.pct > 0) // 0% closes linked components, >0% opens them
   if (sel.id === c.id) sel.pct = c.pct
 }
+function selectById(id) { selectEl(graph.getCell(id)) }
+// drag the whole control panel (its header) to move the underlying element
+let cdrag = null
+function ctrlDragStart(e, c) {
+  selectById(c.id)
+  if (mode.value !== 'edit') return
+  cdrag = { id: c.id, sx: e.clientX, sy: e.clientY, ox: c.x, oy: c.y }
+  window.addEventListener('pointermove', ctrlDragMove)
+  window.addEventListener('pointerup', ctrlDragEnd)
+  e.preventDefault()
+}
+function ctrlDragMove(e) {
+  if (!cdrag || !graph) return
+  const s = scale.value || 1
+  const m = graph.getCell(cdrag.id)
+  if (m) m.position(cdrag.ox + (e.clientX - cdrag.sx) / s, cdrag.oy + (e.clientY - cdrag.sy) / s)
+}
+function ctrlDragEnd() { cdrag = null; window.removeEventListener('pointermove', ctrlDragMove); window.removeEventListener('pointerup', ctrlDragEnd) }
 // open/close every pump/valve linked to a given control
 function driveFor(id, open) {
   if (!graph) return
@@ -333,7 +383,7 @@ onMounted(() => {
   refreshNames()
 })
 
-function startSim() { stopSim(); simulateTick(graph); chartTick(); simTimer = setInterval(() => { simulateTick(graph); chartTick() }, 1000) }
+function startSim() { stopSim(); simulateTick(graph); chartTick(); simTimer = setInterval(() => { simulateTick(graph); chartTick(); if (sel.id) updateSelInfo() }, 1000) }
 function stopSim() { if (simTimer) clearInterval(simTimer); simTimer = null }
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
@@ -375,9 +425,10 @@ onUnmounted(() => {
       </aside>
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
-        <!-- on-canvas control panels: only the widgets the user enabled per control -->
-        <div v-for="c in controlsUi" :key="c.id" v-show="c.showSlider || c.showOpen || c.showClose"
-             class="cov" :style="{ left: (c.x * scale) + 'px', top: ((c.y + 60) * scale) + 'px' }">
+        <!-- the control IS this panel (the JointJS element is invisible); drag the header to move it -->
+        <div v-for="c in controlsUi" :key="c.id" class="cov" :class="{ sel: sel.id === c.id }"
+             :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px' }">
+          <div class="covhdr" :title="c.id" @pointerdown="ctrlDragStart($event, c)">{{ c.name }}</div>
           <template v-if="c.showSlider">
             <input type="range" min="0" max="100" :value="c.pct" @input="onCtrlSlide(c, $event.target.value)">
             <div class="covval">{{ c.pct }}% open</div>
@@ -397,6 +448,11 @@ onUnmounted(() => {
         <div class="ptitle">Inspector</div>
         <div v-if="!sel.id" class="empty">Select a component.</div>
         <div v-else class="fields">
+          <div v-if="sel.info" class="info">
+            <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
+            <div class="irow"><span>Value</span><b class="ival">{{ sel.info.value }}</b></div>
+            <div class="irow"><span>ID</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
+          </div>
           <label v-if="sel.hasName">Name
             <input type="text" v-model="sel.name" @input="applyName">
           </label>
@@ -441,6 +497,14 @@ onUnmounted(() => {
               </label>
             </div>
           </template>
+          <div class="targets">
+            <div class="tlabel">Connections:</div>
+            <div v-if="!sel.connections.length" class="empty">Not connected.</div>
+            <div v-for="cn in sel.connections" :key="cn.dir + cn.id" class="conn">
+              <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b>{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
+              <code class="iid" :title="cn.id">{{ cn.id }}</code>
+            </div>
+          </div>
           <button class="del" @click="deleteSel">🗑 Delete</button>
         </div>
       </aside>
@@ -464,9 +528,11 @@ onUnmounted(() => {
 .ico { width: 18px; text-align: center; }
 .fit { position: relative; flex: 1; height: 70vh; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; }
 .paper { position: absolute; top: 0; left: 0; }
-/* panel itself is click-through so it never blocks dragging the control underneath; only its controls capture pointer */
-.cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
-.cov input, .cov button { pointer-events: auto; }
+/* the control panel IS the control; gaps are click-through, interactive parts + header capture pointer */
+.cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
+.cov.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
+.cov input, .cov button, .cov .covhdr { pointer-events: auto; }
+.cov .covhdr { font-size: 12px; font-weight: 700; color: #334155; cursor: move; user-select: none; padding: 5px 0 4px; border-bottom: 1px solid #eef2f6; margin-bottom: 4px; }
 .chartov { position: absolute; pointer-events: none; padding: 6px; box-sizing: border-box; }
 .cov input[type=range] { width: 100%; accent-color: #2563eb; }
 .cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
@@ -492,6 +558,15 @@ onUnmounted(() => {
 .targets { border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .tlabel { font-size: 11px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: .03em; }
 .targets label.chk { font-weight: 500; }
+.info { display: flex; flex-direction: column; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; }
+.irow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: #64748b; }
+.irow b { color: #1f2d3d; }
+.ival { color: #2563eb !important; }
+.iid { font-size: 10px; color: #94a3b8; word-break: break-all; text-align: right; }
+.conn { border: 1px solid #eef2f6; border-radius: 6px; padding: 5px 7px; }
+.crow { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #1f2d3d; }
+.cdir { font-size: 10px; font-weight: 700; color: #16a34a; white-space: nowrap; }
+.cval { margin-left: auto; font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
 </style>
 
 <style>
