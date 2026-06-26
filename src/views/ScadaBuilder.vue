@@ -530,7 +530,7 @@ onMounted(() => {
     }
     selectEl(view.model)
   })
-  paper.on('blank:pointerclick', () => { if (mode.value === 'edit') { selectEl(null); linkSel.id = null } })
+  paper.on('blank:pointerclick', () => { if (mode.value === 'edit') selectEl(null) })
   paper.on('link:pointerclick', (lv) => { if (mode.value === 'edit' && lv.model.get('type') === 's.FlowPipe') selectLink(lv.model) })
 
   // hover a pipe/leader in edit mode → show a remove (✕) button to delete that connection
@@ -568,7 +568,7 @@ function stopSim() {
     else if (t === 's.Tap') { e.set('pressure', 0); e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
   })
 }
-watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
+watch(mode, m => { linkSel.id = null; if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
