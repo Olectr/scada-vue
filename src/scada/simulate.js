@@ -7,7 +7,7 @@ import { arc } from './shapes'
 // draw the sim-range marker lines on a cylinder tank's 0..100 scale (window y 36..214)
 export function setTankMarks(elm) {
   if (elm.get('type') !== 's.Cyl') return
-  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 95
+  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 70
   const Y = 36, H = 178
   const yLo = Y + H * (1 - lo / 100), yHi = Y + H * (1 - hi / 100)
   elm.attr('markLo', { y1: yLo, y2: yLo, stroke: '#f59e0b' })
@@ -71,13 +71,27 @@ function gauge(elm, graph) {
   elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
 }
 
-// flow meter: shows live flow when a flow-connected pump is running (m³/h ≈ pressure × 120)
-function flowMeter(elm, graph) {
-  let mph = 0
-  for (const fl of graph.getConnectedLinks(elm).filter(x => x.get('type') === 's.FlowPipe')) {
-    const s = fl.source() && fl.source().id, t = fl.target() && fl.target().id
-    const o = graph.getCell(s === elm.id ? t : s)
-    if (o && o.get('type') === 's.Pump' && o.get('on')) { mph = Math.max(mph, Math.round((o.get('pressure') || 0) * 120)); }
+// flow meter: walk the flow-pipe network from the meter; a running pump reachable
+// without crossing a closed valve gives flow (m³/h ≈ pressure × 120). Respects control gating.
+function flowMeter(elm, graph, ctrlPct) {
+  const seen = new Set([elm.id]); const q = [elm.id]; let mph = 0, steps = 0
+  while (q.length && steps < 60) {
+    steps++
+    const id = q.shift(); const node = graph.getCell(id); if (!node) continue
+    const t = node.get('type')
+    if (id !== elm.id) {
+      if (t === 's.Pump') {
+        const gated = ctrlPct && ctrlPct[id] != null && ctrlPct[id] <= 0
+        if (node.get('on') && !gated) mph = Math.max(mph, Math.round((node.get('pressure') || 0) * 120))
+        continue // don't traverse past a pump
+      }
+      if (t === 's.Valve' && !node.get('open')) continue // closed valve blocks the path
+    }
+    for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
+      const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
+      const other = s === id ? tg : s
+      if (other && !seen.has(other)) { seen.add(other); q.push(other) }
+    }
   }
   elm.set('flow', mph, { silent: true })
   elm.attr('val/text', String(mph))
@@ -109,7 +123,7 @@ function flowPipe(link, graph, ctrlPct) {
       const port = link.source() && link.source().port
       if (port === 'top') live = lvl > hi
       else if (port === 'bot' || port === 'in') live = lvl > lo
-      else live = lvl > 1
+      else live = lvl > lo // body-snapped (no port): gate on LOW mark, not unconditional
     }
     else live = true // zone or anything else = always a source
     // a Control linked to this source sets the flow speed (0% also stops it)
@@ -142,6 +156,7 @@ export function refreshLinks(graph) {
 }
 
 export function simulateTick(graph) {
+  const ctrlPct = controlMap(graph)
   graph.getElements().forEach(elm => {
     switch (elm.get('type')) {
       case 's.Cyl': tank(elm, false); break
@@ -149,10 +164,9 @@ export function simulateTick(graph) {
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm, graph); break
-      case 's.Flow': flowMeter(elm, graph); break
+      case 's.Flow': flowMeter(elm, graph, ctrlPct); break
       case 's.Quality': quality(elm); break
     }
   })
-  const ctrlPct = controlMap(graph)
   graph.getLinks().forEach(link => flowPipe(link, graph, ctrlPct))
 }

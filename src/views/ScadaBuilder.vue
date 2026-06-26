@@ -171,12 +171,12 @@ function selectEl(model) {
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
-  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap'
+  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap' && t !== 's.Flow'
   sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
   sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
-  sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 95)
+  sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
   if (t === 's.Control') {
     sel.targets = (model.get('targets') || []).slice()
