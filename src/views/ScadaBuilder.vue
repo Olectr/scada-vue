@@ -190,7 +190,7 @@ function makeCustom(def, x, y) {
     ports: portsCfg([{ id: 'l', x: 0, y: h / 2 }, { id: 'r', x: w, y: h / 2 }], true),
   })
 }
-function addCustom(def) { graph.addCell(makeCustom(def)) }
+function addCustom(def) { if (!graph) return; graph.addCell(makeCustom(def)) }
 
 // --- AI prompt → auto-generate a screen (local heuristic parser; swap in an LLM here) ---
 const ai = reactive({ open: false, text: '' })
@@ -199,37 +199,46 @@ function generateFromPrompt() {
   if (!graph) return
   const text = (ai.text || '').toLowerCase()
   if (graph.getElements().length && !confirm('Replace the canvas with the generated design?')) return
-  ai.open = false; mode.value = 'edit'; graph.clear(); for (const k in counters) delete counters[k]
-  const cnt = kw => { const m = new RegExp('(\\d+)\\s*' + kw).exec(text); return m ? +m[1] : (text.includes(kw) ? 1 : 0) }
-  // ordered flow chain
-  const seq = []
-  for (let i = 0; i < cnt('tank'); i++) seq.push('tank')
-  for (let i = 0; i < cnt('valve'); i++) seq.push('valve')
-  for (let i = 0; i < cnt('pump'); i++) seq.push('pump')
-  for (let i = 0; i < (cnt('flow meter') || cnt('flow')); i++) seq.push('flow')
-  for (let i = 0; i < cnt('hopper'); i++) seq.push('hopper')
-  for (let i = 0; i < cnt('zone'); i++) seq.push('zone')
-  if (!seq.length) seq.push('tank', 'pump', 'zone') // fallback minimal chain
-  const portOut = { tank: 'bot', hopper: 'bot', pump: 'r', valve: 'r', flow: 'r', zone: 'p' }
-  const portIn = { tank: 'top', hopper: 'in', pump: 'l', valve: 'l', flow: 'l', zone: 'p' }
-  let x = 90; const y = 150; const els = []
-  seq.forEach(tp => { const e = makeEl(tp); e.position(x, y); graph.addCell(e); els.push({ e, tp }); x += e.size().width + 90 })
-  for (let i = 0; i < els.length - 1; i++) {
-    const a = els[i], b = els[i + 1]
-    graph.addCell(new FlowPipe({ source: { id: a.e.id, port: portOut[a.tp] || 'r' }, target: { id: b.e.id, port: portIn[b.tp] || 'l' } }))
+  const prev = snapKey() // so the pre-generate canvas can be restored (undo / on error)
+  ai.open = false; mode.value = 'edit'
+  restoring = true // suppress per-add snapshots while building
+  try {
+    graph.clear(); for (const k in counters) delete counters[k]
+    const cnt = kw => { const m = new RegExp('(\\d+)\\s*' + kw).exec(text); return m ? +m[1] : (text.includes(kw) ? 1 : 0) }
+    const seq = []
+    for (let i = 0; i < cnt('tank'); i++) seq.push('tank')
+    for (let i = 0; i < cnt('valve'); i++) seq.push('valve')
+    for (let i = 0; i < cnt('pump'); i++) seq.push('pump')
+    for (let i = 0; i < (cnt('flow meter') || cnt('flow')); i++) seq.push('flow')
+    for (let i = 0; i < cnt('hopper'); i++) seq.push('hopper')
+    for (let i = 0; i < cnt('zone'); i++) seq.push('zone')
+    if (!seq.length) seq.push('tank', 'pump', 'zone') // fallback minimal chain
+    const portOut = { tank: 'bot', hopper: 'bot', pump: 'r', valve: 'r', flow: 'r', zone: 'p' }
+    const portIn = { tank: 'top', hopper: 'in', pump: 'l', valve: 'l', flow: 'l', zone: 'p' }
+    let x = 90; const y = 150; const els = []
+    seq.forEach(tp => { const e = makeEl(tp); e.position(x, y); graph.addCell(e); els.push({ e, tp }); x += e.size().width + 90 })
+    for (let i = 0; i < els.length - 1; i++) {
+      const a = els[i], b = els[i + 1]
+      graph.addCell(new FlowPipe({ source: { id: a.e.id, port: portOut[a.tp] || 'r' }, target: { id: b.e.id, port: portIn[b.tp] || 'l' } }))
+    }
+    let bx = 90; const by = y + 280
+    const extra = (tp, n) => { for (let i = 0; i < n; i++) { const e = makeEl(tp); e.position(bx, by); graph.addCell(e); bx += e.size().width + 50 } }
+    extra('control', cnt('control'))
+    extra('gauge', cnt('gauge'))
+    extra('quality', cnt('quality'))
+    extra('chart', cnt('chart'))
+    const ctrl = graph.getElements().find(e => e.get('type') === 's.Control')
+    const firstPump = els.find(o => o.tp === 'pump')
+    if (ctrl && firstPump) ctrl.set('targets', [firstPump.e.id])
+  } catch (err) {
+    graph.fromJSON(JSON.parse(prev)); migrateCells() // build failed → restore the previous canvas
+    restoring = false; selectEl(null); syncOverlays()
+    alert('Could not generate the design.'); return
   }
-  // extras placed below the chain
-  let bx = 90; const by = y + 280
-  const extra = (tp, n) => { for (let i = 0; i < n; i++) { const e = makeEl(tp); e.position(bx, by); graph.addCell(e); bx += e.size().width + 50 } }
-  extra('control', cnt('control'))
-  extra('gauge', cnt('gauge') || cnt('pressure'))
-  extra('quality', cnt('quality'))
-  extra('chart', cnt('chart'))
-  // wire the first control to the first pump if both exist
-  const ctrl = graph.getElements().find(e => e.get('type') === 's.Control')
-  const firstPump = els.find(o => o.tp === 'pump')
-  if (ctrl && firstPump) ctrl.set('targets', [firstPump.e.id])
-  currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
+  restoring = false
+  currentName.value = ''; selectEl(null); syncOverlays()
+  // record one undoable step: prev → generated
+  past.push(prev); if (past.length > 60) past.shift(); future.length = 0; lastJSON = snapKey(); syncHistFlags()
 }
 
 const sel = reactive({
@@ -687,10 +696,10 @@ onUnmounted(() => {
           <span class="ico">{{ p.ico }}</span> {{ p.label }}
         </button>
         <div class="ptitle" style="margin-top:12px">My Components</div>
-        <button v-for="c in customComps" :key="c.id" :disabled="mode === 'run'" class="customrow">
-          <span @click="addCustom(c)" style="flex:1;text-align:left"><span class="ico" :style="{ color: '#6366f1' }">◧</span> {{ c.label }}</span>
-          <span class="ccdel" title="Delete component" @click.stop="deleteCustomComp(c.id)">✕</span>
-        </button>
+        <div v-for="c in customComps" :key="c.id" class="customrow">
+          <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><span class="ico" style="color:#6366f1">◧</span> {{ c.label }}</button>
+          <button class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)">✕</button>
+        </div>
         <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm">＋ New component</button>
         <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
       </aside>
@@ -945,8 +954,9 @@ onUnmounted(() => {
 .builder.dark .covhdr { border-bottom-color: #334155; }
 /* custom components + AI + dialogs */
 .toolbar button.ai { background: #4f46e5; color: #fff; border-color: #4f46e5; }
-.customrow { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 6px; }
-.ccdel { color: #ef4444; font-weight: 700; padding: 0 4px; }
+.customrow { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.customrow .ccadd { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; }
+.customrow .ccdel { color: #ef4444; font-weight: 700; padding: 5px 8px; }
 .newcomp { width: 100%; border-style: dashed !important; color: #6366f1 !important; }
 .dlg { background: #fff; border-radius: 10px; width: min(420px, 92vw); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
 .dlgbody { display: flex; flex-direction: column; gap: 10px; padding: 16px; }

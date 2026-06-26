@@ -187,7 +187,7 @@ function propagateFlow(graph, ctrlPct) {
     return true
   }
   // passive instruments draw no volumetric flow → never a hydraulic sink, even at a dead end
-  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1 }
+  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1, 's.Custom': 1, 's.Note': 1 }
   // SUPPLY forward
   let changed = true, guard = 0
   while (changed && guard < 200) {
