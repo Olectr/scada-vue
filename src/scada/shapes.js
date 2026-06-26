@@ -95,6 +95,13 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
+// New: flow meter — inline meter showing live water flow (m³/h).
+export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 86, height: 46 }, attrs: {
+  body: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 9, fill: '#fff', stroke: '#5b6772', strokeWidth: 1.5 },
+  val: { x: 'calc(w/2)', y: 21, textAnchor: 'middle', fill: '#0e7490', fontSize: 15, fontWeight: 'bold', text: '0' },
+  unit: { x: 'calc(w/2)', y: 36, textAnchor: 'middle', fill: '#64748b', fontSize: 9, text: 'm³/h' },
+} }, { markup: svg`<rect @selector="body"/><text @selector="val"/><text @selector="unit"/>` })
+
 // New: pressure tap — small inline connector on a pipe; a pressure gauge attaches here.
 export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 22, height: 22 }, attrs: {
   ring: { cx: 11, cy: 11, r: 10, fill: '#fff', stroke: '#5b6772', strokeWidth: 2 },
@@ -159,6 +166,7 @@ Object.assign(joint.shapes.s, {
   Chart,
   Quality,
   Tap,
+  Flow: FlowMeter,
   FlowPipe,
   Leader,
 })

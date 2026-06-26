@@ -15,8 +15,8 @@ export function setTankMarks(elm) {
 }
 
 function tank(elm, isHopper) {
-  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 95
-  const lvl = drift(elm.get('level') ?? 60, lo, hi, 2)
+  // level drifts across the full operating span; simMin/simMax are LOW/HIGH marks + flow gates
+  const lvl = drift(elm.get('level') ?? 60, 8, 96, 2)
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
   else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
@@ -71,6 +71,18 @@ function gauge(elm, graph) {
   elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
 }
 
+// flow meter: shows live flow when a flow-connected pump is running (m³/h ≈ pressure × 120)
+function flowMeter(elm, graph) {
+  let mph = 0
+  for (const fl of graph.getConnectedLinks(elm).filter(x => x.get('type') === 's.FlowPipe')) {
+    const s = fl.source() && fl.source().id, t = fl.target() && fl.target().id
+    const o = graph.getCell(s === elm.id ? t : s)
+    if (o && o.get('type') === 's.Pump' && o.get('on')) { mph = Math.max(mph, Math.round((o.get('pressure') || 0) * 120)); }
+  }
+  elm.set('flow', mph, { silent: true })
+  elm.attr('val/text', String(mph))
+}
+
 function quality(elm) {
   const ph = drift(elm.get('ph') ?? 7.2, 6.6, 7.8, 0.05); elm.set('ph', ph, { silent: true }); elm.attr('phV/text', ph.toFixed(2))
   const tb = drift(elm.get('turb') ?? 0.8, 0.2, 1.6, 0.08); elm.set('turb', tb, { silent: true }); elm.attr('tbV/text', tb.toFixed(2) + ' NTU')
@@ -90,7 +102,15 @@ function flowPipe(link, graph, ctrlPct) {
     if (t === 's.Pump') live = !!src.get('on')
     else if (t === 's.Valve') live = !!src.get('open')
     else if (t === 's.Control') { pct = clamp(src.get('pct') ?? 100, 0, 100); live = pct > 0 }
-    else if (t === 's.Cyl' || t === 's.Hopper') live = (src.get('level') ?? 0) > 1
+    else if (t === 's.Cyl' || t === 's.Hopper') {
+      // a tank outlet flows only when level is past its mark: top → above HIGH, bottom → above LOW
+      const lvl = src.get('level') ?? 0
+      const hi = src.get('simMax') ?? 70, lo = src.get('simMin') ?? 20
+      const port = link.source() && link.source().port
+      if (port === 'top') live = lvl > hi
+      else if (port === 'bot' || port === 'in') live = lvl > lo
+      else live = lvl > 1
+    }
     else live = true // zone or anything else = always a source
     // a Control linked to this source sets the flow speed (0% also stops it)
     if (t !== 's.Control' && ctrlPct[srcId] != null) {
@@ -129,6 +149,7 @@ export function simulateTick(graph) {
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm, graph); break
+      case 's.Flow': flowMeter(elm, graph); break
       case 's.Quality': quality(elm); break
     }
   })
