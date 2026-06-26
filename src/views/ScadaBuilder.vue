@@ -395,7 +395,7 @@ function computeAlarms() {
     const t = e.get('type'); let msg = null
     if (t === 's.Cyl' || t === 's.Hopper') {
       const lvl = Math.round(e.get('level') ?? 0), lo = e.get('simMin') ?? 20
-      if (lvl <= lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
+      if (lvl < lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
     } else if (t === 's.PG') {
       const v = e.get('value') ?? 0, hi = e.get('simMax') ?? 8
       if (v >= hi * 0.95) msg = `HIGH PRESSURE ${v.toFixed(1)}`
@@ -429,10 +429,9 @@ function onKey(e) {
   const tag = (e.target && e.target.tagName) || ''
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
   const mod = e.metaKey || e.ctrlKey
-  const k = e.key.toLowerCase()
-  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
-  else if (mod && k === 'y') { e.preventDefault(); redo() }
-  else if (mod && k === 'd') { e.preventDefault(); duplicateSel() }
+  if (mod && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+  else if (mod && e.code === 'KeyY') { e.preventDefault(); redo() }
+  else if (mod && e.code === 'KeyD') { e.preventDefault(); if (mode.value === 'edit') duplicateSel() }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.id && mode.value === 'edit') { e.preventDefault(); deleteSel() }
 }
 
@@ -493,7 +492,7 @@ onMounted(() => {
   // keep on-canvas overlays (controls + charts) positioned + in sync
   graph.on('add remove change:position', syncOverlays)
   // snapshot structural edits for undo/redo
-  graph.on('add remove change:position change:source change:target change:angle', scheduleSnap)
+  graph.on('add remove change:position change:source change:target change:angle change:size', scheduleSnap)
   syncOverlays()
   resetHistory()
 
@@ -521,7 +520,7 @@ watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 onUnmounted(() => {
   stopSim()
   ctrlDragEnd() // drop any in-flight panel-drag window listeners
-  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays) }
+  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays); graph.off('add remove change:position change:source change:target change:angle change:size', scheduleSnap) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
   window.removeEventListener('keydown', onKey)
@@ -767,6 +766,9 @@ onUnmounted(() => {
 .builder.dark .fit { border-color: #334155; background: #0f172a; }
 .builder.dark .info { background: #0f172a; border-color: #334155; }
 .builder.dark .hint, .builder.dark .empty { color: #94a3b8; }
+.builder.dark .cov, .builder.dark .chartov { background: #1e293b; border-color: #334155; }
+.builder.dark .covhdr, .builder.dark .chdr { color: #e2e8f0; border-color: #334155; }
+.builder.dark .covhdr { border-bottom-color: #334155; }
 </style>
 
 <style>
