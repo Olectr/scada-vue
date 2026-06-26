@@ -45,6 +45,7 @@ function gauge(elm) {
 // ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
 // A pipe whose source is a control-driven pump/valve runs at that control's speed.
 function flowPipe(link, graph, ctrlPct) {
+  if (link.get('type') === 's.Leader') return // instrument leaders don't carry flow
   const srcId = link.source() && link.source().id
   const src = srcId ? graph.getCell(srcId) : null
   let live = false, pct = 100

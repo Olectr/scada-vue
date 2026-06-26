@@ -1,9 +1,8 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, FlowPipe, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual } from '../scada/simulate'
-import { drift } from '../composables/usePlantData'
 import TrendChart from '../components/TrendChart.vue'
 
 const host = ref(null)
@@ -108,7 +107,7 @@ function makeEl(type) {
     case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95 })
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2 })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true })
-    case 'gauge': return new PGauge({ position: { x, y }, value: 4, simMin: 0, simMax: 8 })
+    case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
@@ -302,34 +301,38 @@ function driveFor(id, open) {
   refreshLinks(graph)
 }
 
-// --- on-canvas live charts (auto-simulated trend) ---
+// --- on-canvas live charts: plot every tank/hopper's current capacity (%) over time ---
 const chartsUi = ref([])
-const chartData = reactive({}) // id -> number[]
-function seedChart(id) {
-  if (chartData[id]) return
-  let v = 50; const arr = []
-  for (let i = 0; i < 20; i++) { v = drift(v, 20, 90, 4); arr.push(Math.round(v)) }
-  chartData[id] = arr
+const tankHist = reactive({}) // tankId -> level history (number[])
+const TANK_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
+function tanksInGraph() { return graph.getElements().filter(e => e.get('type') === 's.Cyl' || e.get('type') === 's.Hopper') }
+function seedTanks() {
+  if (!graph) return
+  tanksInGraph().forEach(e => { if (!tankHist[e.id]) tankHist[e.id] = Array(20).fill(Math.round(e.get('level') ?? 50)) })
+  const ids = new Set(tanksInGraph().map(e => e.id))
+  Object.keys(tankHist).forEach(id => { if (!ids.has(id)) delete tankHist[id] })
+}
+function tankTick() {
+  if (!graph) return
+  tanksInGraph().forEach(e => {
+    const a = tankHist[e.id] || []
+    tankHist[e.id] = [...a, Math.round(e.get('level') ?? 0)].slice(-30)
+  })
+}
+// one line per tank — label = tank name, value = its capacity %
+function tankSeries() {
+  return tanksInGraph().map((e, i) => ({
+    label: nameOf(e), color: TANK_COLORS[i % TANK_COLORS.length],
+    fill: i === 0 ? 'rgba(59,130,246,.15)' : undefined, data: tankHist[e.id] || [],
+  }))
 }
 function syncCharts() {
   if (!graph) return
+  seedTanks()
   chartsUi.value = graph.getElements()
     .filter(e => e.get('type') === 's.Chart')
-    .map(e => { const p = e.position(), s = e.size(); seedChart(e.id); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
-  // prune data buffers for charts that no longer exist (avoid unbounded growth)
-  const ids = new Set(chartsUi.value.map(c => c.id))
-  Object.keys(chartData).forEach(id => { if (!ids.has(id)) delete chartData[id] })
+    .map(e => { const p = e.position(), s = e.size(); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
 }
-function chartTick() {
-  if (!graph) return
-  graph.getElements().forEach(e => {
-    if (e.get('type') !== 's.Chart') return
-    const a = chartData[e.id] || []
-    const last = a.length ? a[a.length - 1] : 50
-    chartData[e.id] = [...a, Math.round(drift(last, 20, 90, 5))].slice(-30)
-  })
-}
-function seriesFor(id) { return [{ label: 'Value', color: '#2563eb', fill: 'rgba(37,99,235,.15)', data: chartData[id] || [] }] }
 // rebuild both overlay sets on any structural/position change
 function syncOverlays() { syncControls(); syncCharts() }
 
@@ -350,7 +353,8 @@ onMounted(() => {
     background: { color: '#ffffff' }, cellViewNamespace: joint.shapes, async: true,
     gridSize: 10, drawGrid: { name: 'dot', args: { color: '#e2e8f0' } },
     defaultConnectionPoint: { name: 'anchor' },
-    defaultLink: () => new FlowPipe(),
+    // drawing from a pressure gauge makes a dashed instrument leader; otherwise a flow pipe
+    defaultLink: (cellView) => (cellView && cellView.model && cellView.model.get('type') === 's.PG' ? new Leader() : new FlowPipe()),
     linkPinning: false,
     snapLinks: { radius: 20 },
     validateMagnet: () => mode.value === 'edit',
@@ -384,7 +388,7 @@ onMounted(() => {
   refreshNames()
 })
 
-function startSim() { stopSim(); simulateTick(graph); chartTick(); simTimer = setInterval(() => { simulateTick(graph); chartTick(); if (sel.id) updateSelInfo() }, 1000) }
+function startSim() { stopSim(); simulateTick(graph); tankTick(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); if (sel.id) updateSelInfo() }, 1000) }
 function stopSim() { if (simTimer) clearInterval(simTimer); simTimer = null }
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
@@ -443,7 +447,7 @@ onUnmounted(() => {
         <!-- on-canvas live charts -->
         <div v-for="c in chartsUi" :key="c.id" class="chartov"
              :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px', width: (c.w * scale) + 'px', height: (c.h * scale) + 'px' }">
-          <TrendChart :series="seriesFor(c.id)" style="width:100%;height:100%" />
+          <TrendChart :series="tankSeries()" style="width:100%;height:100%" />
         </div>
       </div>
       <aside class="inspector">

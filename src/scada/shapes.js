@@ -59,7 +59,7 @@ export const Hopper = joint.dia.Element.define('s.Hopper', { size: { width: 170,
 export const Pump = joint.dia.Element.define('s.Pump', { size: { width: 92, height: 92 }, attrs: {
   ring: { cx: 46, cy: 46, r: 45, fill: SILVER, stroke: '#7c858f', strokeWidth: 1, cursor: 'pointer' },
   inner: { cx: 46, cy: 46, r: 33, fill: '#8b949e', stroke: '#5b6772', cursor: 'pointer' },
-  imp: { d: 'M46 18 q8 22 28 28 q-22 8 -28 28 q-8 -22 -28 -28 q22 -8 28 -28 Z', fill: '#3b434c', cursor: 'pointer' },
+  imp: { d: 'M46 46 L46 12 Q64 18 60 40 Z M46 46 L80 46 Q74 64 52 60 Z M46 46 L46 80 Q28 74 32 52 Z M46 46 L12 46 Q18 28 40 32 Z', fill: '#3b434c', cursor: 'pointer' },
   hub: { cx: 46, cy: 46, r: 6, fill: '#11151a' },
   name: { x: 46, y: 112, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
 } }, { markup: svg`<circle @selector="ring"/><circle @selector="inner"/><path @selector="imp"/><circle @selector="hub"/><text @selector="name"/>` })
@@ -111,6 +111,15 @@ export const FlowPipe = joint.dia.Link.define('s.FlowPipe', {
   { tagName: 'path', selector: 'line', attributes: { fill: 'none' } },
 ] })
 
+// New: instrument leader — thin grey dashed line connecting a gauge to the
+// component it measures (e.g. pressure gauge → pipe between pump and valve).
+export const Leader = joint.dia.Link.define('s.Leader', {
+  z: -1,
+  attrs: {
+    line: { connection: true, stroke: '#94a3b8', strokeWidth: 2, strokeDasharray: '5 4', fill: 'none', targetMarker: { type: 'circle', r: 3, fill: '#94a3b8', stroke: 'none' } },
+  },
+}, { markup: [{ tagName: 'path', selector: 'line', attributes: { fill: 'none' } }] })
+
 // define() only auto-registers into joint.shapes when a *global* `joint` exists (UMD builds).
 // Under ESM (Vite) there is no global, so register manually by the type-string leaf so that
 // graph.fromJSON() can resolve these types via `cellNamespace: joint.shapes`.
@@ -125,4 +134,5 @@ Object.assign(joint.shapes.s, {
   Control,
   Chart,
   FlowPipe,
+  Leader,
 })
