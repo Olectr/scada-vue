@@ -316,9 +316,54 @@ const sel = reactive({
   targets: [], targetOptions: [],
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [], angle: 0, tag: '',
+  x: 0, y: 0, w: 0, h: 0, isCustom: false, locked: false,
+  hasStyle: false, fillC: '#ffffff', borderC: '#000000', note: '', devtag: '',
 })
 const tagList = TAGS
 function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
+
+// --- geometry / z-order / lock ---
+function applyPos() { const m = selModel(); if (m) m.position(Number(sel.x) || 0, Number(sel.y) || 0) }
+function applySize() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Custom') return
+  const w = Math.max(30, Number(sel.w) || 96), h = Math.max(24, Number(sel.h) || 60)
+  m.resize(w, h)
+  const map = { top: { x: w / 2, y: 0 }, bottom: { x: w / 2, y: h }, left: { x: 0, y: h / 2 }, right: { x: w, y: h / 2 } }
+  m.set('ports', portsCfg(m.getPorts().map(p => p.id).filter(id => map[id]).map(id => ({ id, ...map[id] })), true))
+  renderCustom(m)
+}
+function toFront() { const m = selModel(); if (m) m.toFront() }
+function toBack() { const m = selModel(); if (m) m.toBack() }
+function toggleLock() { const m = selModel(); if (m) m.set('locked', sel.locked) }
+
+// --- per-element style (fill/border) on the primary body selector ---
+// solid-fill bodies only (metal-gradient shapes excluded so a colour input stays valid)
+const STYLE_SEL = { 's.Zone': 'flag', 's.Note': 'box', 's.Quality': 'box' }
+function applyStyle() {
+  const m = selModel(); if (!m) return
+  if (m.get('type') === 's.Custom') { m.set('fillColor', sel.fillC); m.set('borderColor', sel.borderC); renderCustom(m) }
+  else { const s = STYLE_SEL[m.get('type')]; if (s) { m.attr(s + '/fill', sel.fillC); m.attr(s + '/stroke', sel.borderC) } }
+}
+
+// --- notes / tag ---
+function applyNote() { const m = selModel(); if (m) m.set('note', sel.note || undefined) }
+function applyDevtag() { const m = selModel(); if (m) m.set('devtag', sel.devtag || undefined) }
+
+// per-type live readout rows
+function liveFields(m) {
+  const t = m.get('type'), F = []
+  const add = (l, v) => F.push({ l, v })
+  if (t === 's.Cyl' || t === 's.Hopper') add('Level', Math.round(m.get('level') ?? 0) + '%')
+  else if (t === 's.Pump') { add('State', m.get('on') ? 'ON' : 'OFF'); add('Pressure', Number(m.get('pressure') ?? 0).toFixed(1) + ' bar'); const s = m.get('runtime') || 0; add('Runtime', Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm') }
+  else if (t === 's.Valve') add('State', m.get('open') ? 'OPEN' : 'CLOSED')
+  else if (t === 's.PG') add('Pressure', Number(m.get('value') ?? 0).toFixed(1) + ' bar')
+  else if (t === 's.Tap') add('Pressure', Number(m.get('pressure') ?? 0).toFixed(1) + ' bar')
+  else if (t === 's.Flow') { add('Flow', (m.get('flow') ?? 0) + ' m³/h'); add('Total', Math.round(m.get('total') || 0) + ' m³') }
+  else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).length) }
+  else if (t === 's.Quality') { add('pH', Number(m.get('ph') ?? 0).toFixed(2)); add('Turb', Number(m.get('turb') ?? 0).toFixed(2) + ' NTU'); add('Cl', Number(m.get('cl') ?? 0).toFixed(2)); add('DO', Number(m.get('do') ?? 0).toFixed(1)) }
+  else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
+  return F
+}
 // pipe styling — separate selection for links (FlowPipe)
 const linkSel = reactive({ id: null, color: '#16a34a', width: 7 })
 function selectLink(m) {
@@ -354,10 +399,7 @@ function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/tex
 function updateSelInfo() {
   const m = selModel()
   if (!m) { sel.info = null; sel.connections = []; return }
-  let extra = null, extraLabel = ''
-  if (m.get('type') === 's.Flow') { extra = Math.round(m.get('total') || 0) + ' m³'; extraLabel = 'Total' }
-  else if (m.get('type') === 's.Pump') { const s = m.get('runtime') || 0; extra = Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm'; extraLabel = 'Runtime' }
-  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m), extra, extraLabel }
+  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), fields: liveFields(m) }
   if (m.get('type') === 's.Control') {
     sel.connections = (m.get('targets') || []).map(id => {
       const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
@@ -386,6 +428,13 @@ function selectEl(model) {
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
   sel.angle = typeof model.angle === 'function' ? Math.round(model.angle()) : 0
   sel.tag = model.get('tag') || ''
+  const p = model.position(), sz = model.size()
+  sel.x = Math.round(p.x); sel.y = Math.round(p.y); sel.w = sz.width; sel.h = sz.height
+  sel.isCustom = t === 's.Custom'; sel.locked = !!model.get('locked')
+  sel.hasStyle = t === 's.Custom' || !!STYLE_SEL[t]
+  if (t === 's.Custom') { sel.fillC = model.get('fillColor') || '#e0e7ff'; sel.borderC = model.get('borderColor') || '#6366f1' }
+  else if (STYLE_SEL[t]) { sel.fillC = model.attr(STYLE_SEL[t] + '/fill') || '#ffffff'; sel.borderC = model.attr(STYLE_SEL[t] + '/stroke') || '#000000' }
+  sel.note = model.get('note') || ''; sel.devtag = model.get('devtag') || ''
   if (t === 's.Control') {
     sel.targets = (model.get('targets') || []).slice()
     // pumps, valves, and on/off|open/close custom components are drivable
@@ -659,7 +708,7 @@ onMounted(() => {
       if (cv.model.get('type') === 's.PG') return tv.model.get('type') === 's.Tap'
       return true
     },
-    interactive: () => (mode.value === 'edit' ? { linkMove: false } : false),
+    interactive: (cellView) => (cellView.model.get('locked') ? false : (mode.value === 'edit' ? { linkMove: false } : false)),
   })
 
   paper.on('element:pointerclick', view => {
@@ -821,8 +870,7 @@ onUnmounted(() => {
         <div v-else class="fields">
           <div v-if="sel.info" class="info">
             <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
-            <div class="irow"><span>Value</span><b class="ival">{{ sel.info.value }}</b></div>
-            <div v-if="sel.info.extra" class="irow"><span>{{ sel.info.extraLabel }}</span><b>{{ sel.info.extra }}</b></div>
+            <div v-for="f in sel.info.fields" :key="f.l" class="irow"><span>{{ f.l }}</span><b class="ival">{{ f.v }}</b></div>
             <div class="irow"><span>ID</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
           </div>
           <label v-if="sel.hasName">Name
@@ -892,6 +940,37 @@ onUnmounted(() => {
               <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b class="cname">{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
               <code class="iid" :title="cn.id">{{ cn.id }}</code>
             </div>
+          </div>
+          <!-- style (solid-fill shapes + custom) -->
+          <div v-if="sel.hasStyle" class="targets">
+            <div class="tlabel">Style</div>
+            <div class="frow">
+              <label>Fill<input type="color" v-model="sel.fillC" @input="applyStyle"></label>
+              <label>Border<input type="color" v-model="sel.borderC" @input="applyStyle"></label>
+            </div>
+          </div>
+          <!-- geometry + z-order + lock -->
+          <div class="targets">
+            <div class="tlabel">Geometry</div>
+            <div class="frow">
+              <label>X<input type="number" v-model.number="sel.x" @input="applyPos"></label>
+              <label>Y<input type="number" v-model.number="sel.y" @input="applyPos"></label>
+            </div>
+            <div v-if="sel.isCustom" class="frow">
+              <label>W<input type="number" v-model.number="sel.w" @input="applySize"></label>
+              <label>H<input type="number" v-model.number="sel.h" @input="applySize"></label>
+            </div>
+            <div class="pctstep">
+              <button @click="toBack">⤓ Back</button>
+              <button @click="toFront">⤒ Front</button>
+              <label class="chk" style="margin-left:auto"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> 🔒 Lock</label>
+            </div>
+          </div>
+          <!-- notes + tag -->
+          <div class="targets">
+            <div class="tlabel">Notes</div>
+            <label>Tag<input type="text" v-model="sel.devtag" @input="applyDevtag" placeholder="PMP-101"></label>
+            <textarea v-model="sel.note" @input="applyNote" rows="2" placeholder="Notes…"></textarea>
           </div>
           <button v-if="mode === 'edit'" class="del" @click="deleteSel">🗑 Delete</button>
         </div>
@@ -1020,6 +1099,8 @@ onUnmounted(() => {
 .fields label.chk { flex-direction: row; align-items: center; gap: 6px; }
 .fields input[type=text], .fields input[type=number], .fields select { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
 .fields input[type=color] { width: 100%; height: 28px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 1px; cursor: pointer; }
+.fields textarea { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; resize: vertical; }
+.fields .pctstep label.chk { font-weight: 500; font-size: 11px; }
 .fields input[type=range] { accent-color: #2563eb; }
 .pctval { font-size: 11px; color: #2563eb; }
 .del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
