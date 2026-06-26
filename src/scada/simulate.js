@@ -1,7 +1,7 @@
 // Generic per-element-type simulation for the SCADA builder.
 // Auto-generates drifting demo values and animates pipe flow based on the
 // pipe's SOURCE element state (simple source-check, not a full upstream chain).
-import { clamp, drift } from '../composables/usePlantData'
+import { clamp, drift, rnd } from '../composables/usePlantData'
 import { arc } from './shapes'
 
 // draw the sim-range marker lines on a cylinder tank's 0..100 scale (window y 36..214)
@@ -14,9 +14,14 @@ export function setTankMarks(elm) {
   elm.attr('markHi', { y1: yHi, y2: yHi, stroke: '#dc2626' })
 }
 
-function tank(elm, isHopper) {
-  // level drifts across the full operating span; simMin/simMax are LOW/HIGH marks + flow gates
-  const lvl = drift(elm.get('level') ?? 60, 8, 96, 2)
+function tank(elm, isHopper, nodeFlow, outletActive) {
+  // capacity follows the balance of inflow vs outflow; idle tanks sit in a 90-95 mock band
+  let lvl = elm.get('level') ?? 60
+  const filling = !!nodeFlow[elm.id], draining = !!outletActive[elm.id]
+  if (filling && !draining) lvl = clamp(lvl + rnd(1.5, 3.5), 8, 96)
+  else if (draining && !filling) lvl = clamp(lvl - rnd(1.5, 3.5), 8, 96)
+  else if (filling && draining) lvl = drift(lvl, 8, 96, 1.5)
+  else lvl = drift(lvl, 90, 95, 1.2) // idle: mock high band
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
   else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
@@ -33,10 +38,12 @@ export function setValveVisual(elm) {
   elm.attr('ind/fill', elm.get('open') ? '#16a34a' : '#cbd5e1')
 }
 
-function pump(elm) {
-  const on = !!elm.get('on')
-  setPumpVisual(elm)
-  elm.set('pressure', on ? drift(elm.get('pressure') || 2, 1.4, 3.4, 0.18) : 0, { silent: true })
+function pump(elm, fed) {
+  // a pump only actually runs if it's on AND has water (dry-run → stops)
+  const running = !!elm.get('on') && fed
+  elm.attr('imp/class', running ? 'wp-spin' : '')
+  elm.attr('inner/fill', running ? '#5fb98f' : '#8b949e')
+  elm.set('pressure', running ? drift(elm.get('pressure') || 2, 1.4, 3.4, 0.18) : 0, { silent: true })
 }
 
 function valve(elm) {
@@ -157,7 +164,7 @@ function propagateFlow(graph, ctrlPct) {
       if (live && !nodeFlow[tId]) { nodeFlow[tId] = true; changed = true }
     }
   }
-  return { linkLive, nodeFlow }
+  return { linkLive, nodeFlow, inbound }
 }
 
 function animateLinks(graph, ctrlPct, linkLive) {
@@ -181,12 +188,18 @@ export function refreshLinks(graph) {
 
 export function simulateTick(graph) {
   const ctrlPct = controlMap(graph)
-  const { linkLive, nodeFlow } = propagateFlow(graph, ctrlPct)
+  const { linkLive, nodeFlow, inbound } = propagateFlow(graph, ctrlPct)
+  // a tank is "draining" if any of its outlet pipes is live
+  const outletActive = {}
+  graph.getLinks().forEach(l => {
+    if (l.get('type') !== 's.FlowPipe' || !linkLive.get(l.id)) return
+    const sId = l.source() && l.source().id; if (sId) outletActive[sId] = true
+  })
   graph.getElements().forEach(elm => {
     switch (elm.get('type')) {
-      case 's.Cyl': tank(elm, false); break
-      case 's.Hopper': tank(elm, true); break
-      case 's.Pump': pump(elm); break
+      case 's.Cyl': tank(elm, false, nodeFlow, outletActive); break
+      case 's.Hopper': tank(elm, true, nodeFlow, outletActive); break
+      case 's.Pump': pump(elm, nodeFlow[elm.id] || !inbound[elm.id]); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm, graph, nodeFlow, ctrlPct); break
       case 's.Flow': flowMeter(elm, graph, nodeFlow, ctrlPct); break
