@@ -43,3 +43,8 @@ const chartOptions = {
 <template>
   <div class="chart-box"><Line :data="chartData" :options="chartOptions" /></div>
 </template>
+
+<style scoped>
+/* fill the host box so a parent setting height:100% (e.g. the builder chart overlay) sizes the canvas */
+.chart-box { width: 100%; height: 100%; }
+</style>
