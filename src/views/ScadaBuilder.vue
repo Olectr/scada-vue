@@ -685,10 +685,6 @@ onUnmounted(() => {
       <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
       <button :class="{ on: mode === 'run' }" @click="mode = 'run'">▶ Run</button>
     </div>
-    <div v-if="alarms.length" class="alarmbar">
-      <span class="abadge">⚠ {{ alarms.length }}</span>
-      <span v-for="a in alarms" :key="a.id" class="aitem">{{ a.name }}: {{ a.msg }}</span>
-    </div>
     <div class="cols">
       <aside class="palette">
         <div class="ptitle">Components</div>
@@ -705,6 +701,11 @@ onUnmounted(() => {
       </aside>
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
+        <!-- alarm banner floats over the canvas so it never reflows/blinks the design -->
+        <div v-if="alarms.length" class="alarmbar">
+          <span class="abadge">⚠ {{ alarms.length }}</span>
+          <span v-for="a in alarms" :key="a.id" class="aitem">{{ a.name }}: {{ a.msg }}</span>
+        </div>
         <!-- the control IS this panel (the JointJS element is invisible); drag the header to move it -->
         <div v-for="c in controlsUi" :key="c.id" class="cov" :class="{ sel: sel.id === c.id }"
              :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px' }">
@@ -934,7 +935,7 @@ onUnmounted(() => {
 .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cval { font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
 /* alarms */
-.alarmbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 12px; font-weight: 600; }
+.alarmbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 7; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef2f2cc; backdrop-filter: blur(2px); border: 1px solid #fca5a5; color: #b91c1c; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
 .abadge { background: #dc2626; color: #fff; border-radius: 12px; padding: 1px 9px; }
 .aitem { background: #fff; border: 1px solid #fecaca; border-radius: 4px; padding: 1px 7px; }
 .alarmbadge { position: absolute; z-index: 6; color: #dc2626; font-size: 16px; pointer-events: none; animation: alarmpulse 1s ease-in-out infinite; }
