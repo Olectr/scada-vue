@@ -95,6 +95,12 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
+// New: user-defined custom component — a labelled, coloured box with inlet/outlet ports.
+export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, height: 60 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5 },
+  name: { x: 'calc(w/2)', y: 'calc(h/2)', textAnchor: 'middle', textVerticalAnchor: 'middle', fill: '#3730a3', fontSize: 12, fontWeight: 'bold', text: 'Custom' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
+
 // New: annotation label (sticky note) — free text on the canvas.
 export const Note = joint.dia.Element.define('s.Note', { size: { width: 150, height: 32 }, attrs: {
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 5, fill: '#fef9c3', stroke: '#fde047', strokeWidth: 1 },
@@ -183,6 +189,7 @@ Object.assign(joint.shapes.s, {
   Tap,
   Flow: FlowMeter,
   Note,
+  Custom,
   FlowPipe,
   Leader,
 })

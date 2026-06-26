@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
@@ -169,6 +169,69 @@ function addComponent(type) {
   if (sel.isControl && (type === 'pump' || type === 'valve')) selectEl(selModel())
 }
 
+// --- user-defined custom components ---
+const CC_KEY = 'scada.builder.customComps'
+const customComps = ref([])
+function loadCustomComps() { try { customComps.value = JSON.parse(localStorage.getItem(CC_KEY) || '[]') } catch { customComps.value = [] } }
+function persistCustomComps() { localStorage.setItem(CC_KEY, JSON.stringify(customComps.value)) }
+const compForm = reactive({ open: false, label: 'My Part', color: '#e0e7ff', w: 96, h: 60 })
+function openCompForm() { compForm.open = true; compForm.label = 'My Part'; compForm.color = '#e0e7ff'; compForm.w = 96; compForm.h = 60 }
+function saveCustomComp() {
+  const label = (compForm.label || '').trim(); if (!label) return
+  customComps.value = [...customComps.value, { id: 'c' + Date.now(), label, color: compForm.color, w: Number(compForm.w) || 96, h: Number(compForm.h) || 60 }]
+  persistCustomComps(); compForm.open = false
+}
+function deleteCustomComp(id) { customComps.value = customComps.value.filter(c => c.id !== id); persistCustomComps() }
+function makeCustom(def, x, y) {
+  const w = def.w, h = def.h
+  return new Custom({
+    position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
+    attrs: { box: { fill: def.color }, name: { text: nextName(def.label) } },
+    ports: portsCfg([{ id: 'l', x: 0, y: h / 2 }, { id: 'r', x: w, y: h / 2 }], true),
+  })
+}
+function addCustom(def) { graph.addCell(makeCustom(def)) }
+
+// --- AI prompt → auto-generate a screen (local heuristic parser; swap in an LLM here) ---
+const ai = reactive({ open: false, text: '' })
+function openAi() { ai.open = true; if (!ai.text) ai.text = '2 tanks, 2 pumps, 2 valves, a flow meter, a control and a chart' }
+function generateFromPrompt() {
+  if (!graph) return
+  const text = (ai.text || '').toLowerCase()
+  if (graph.getElements().length && !confirm('Replace the canvas with the generated design?')) return
+  ai.open = false; mode.value = 'edit'; graph.clear(); for (const k in counters) delete counters[k]
+  const cnt = kw => { const m = new RegExp('(\\d+)\\s*' + kw).exec(text); return m ? +m[1] : (text.includes(kw) ? 1 : 0) }
+  // ordered flow chain
+  const seq = []
+  for (let i = 0; i < cnt('tank'); i++) seq.push('tank')
+  for (let i = 0; i < cnt('valve'); i++) seq.push('valve')
+  for (let i = 0; i < cnt('pump'); i++) seq.push('pump')
+  for (let i = 0; i < (cnt('flow meter') || cnt('flow')); i++) seq.push('flow')
+  for (let i = 0; i < cnt('hopper'); i++) seq.push('hopper')
+  for (let i = 0; i < cnt('zone'); i++) seq.push('zone')
+  if (!seq.length) seq.push('tank', 'pump', 'zone') // fallback minimal chain
+  const portOut = { tank: 'bot', hopper: 'bot', pump: 'r', valve: 'r', flow: 'r', zone: 'p' }
+  const portIn = { tank: 'top', hopper: 'in', pump: 'l', valve: 'l', flow: 'l', zone: 'p' }
+  let x = 90; const y = 150; const els = []
+  seq.forEach(tp => { const e = makeEl(tp); e.position(x, y); graph.addCell(e); els.push({ e, tp }); x += e.size().width + 90 })
+  for (let i = 0; i < els.length - 1; i++) {
+    const a = els[i], b = els[i + 1]
+    graph.addCell(new FlowPipe({ source: { id: a.e.id, port: portOut[a.tp] || 'r' }, target: { id: b.e.id, port: portIn[b.tp] || 'l' } }))
+  }
+  // extras placed below the chain
+  let bx = 90; const by = y + 280
+  const extra = (tp, n) => { for (let i = 0; i < n; i++) { const e = makeEl(tp); e.position(bx, by); graph.addCell(e); bx += e.size().width + 50 } }
+  extra('control', cnt('control'))
+  extra('gauge', cnt('gauge') || cnt('pressure'))
+  extra('quality', cnt('quality'))
+  extra('chart', cnt('chart'))
+  // wire the first control to the first pump if both exist
+  const ctrl = graph.getElements().find(e => e.get('type') === 's.Control')
+  const firstPump = els.find(o => o.tp === 'pump')
+  if (ctrl && firstPump) ctrl.set('targets', [firstPump.e.id])
+  currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
+}
+
 const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
   isPump: false, isValve: false, isControl: false,
@@ -195,7 +258,7 @@ function applyPipe() {
   m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
 }
 function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -555,6 +618,7 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   window.addEventListener('keydown', onKey)
   refreshNames()
+  loadCustomComps()
 })
 
 function startSim() { stopSim(); simulateTick(graph); tankTick(); computeAlarms(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); computeAlarms(); if (sel.id) updateSelInfo() }, 1000) }
@@ -606,6 +670,7 @@ onUnmounted(() => {
         <option value="dual">Dual Pump</option>
       </select>
       <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
+      <button class="ai" @click="openAi">🤖 AI Generate</button>
       <span class="sp"></span>
       <button :class="{ on: dark }" title="Dark mode" @click="dark = !dark">🌙</button>
       <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
@@ -621,6 +686,12 @@ onUnmounted(() => {
         <button v-for="p in palette" :key="p.type" :disabled="mode === 'run'" @click="addComponent(p.type)">
           <span class="ico">{{ p.ico }}</span> {{ p.label }}
         </button>
+        <div class="ptitle" style="margin-top:12px">My Components</div>
+        <button v-for="c in customComps" :key="c.id" :disabled="mode === 'run'" class="customrow">
+          <span @click="addCustom(c)" style="flex:1;text-align:left"><span class="ico" :style="{ color: '#6366f1' }">◧</span> {{ c.label }}</span>
+          <span class="ccdel" title="Delete component" @click.stop="deleteCustomComp(c.id)">✕</span>
+        </button>
+        <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm">＋ New component</button>
         <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
       </aside>
       <div ref="fitEl" class="fit">
@@ -753,6 +824,33 @@ onUnmounted(() => {
         <div class="fsbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
       </div>
     </div>
+
+    <!-- new custom component -->
+    <div v-if="compForm.open" class="fsmodal" @click.self="compForm.open = false">
+      <div class="dlg">
+        <div class="fshead"><b>New custom component</b><button @click="compForm.open = false">✕</button></div>
+        <div class="dlgbody">
+          <label>Name<input type="text" v-model="compForm.label"></label>
+          <label>Color<input type="color" v-model="compForm.color"></label>
+          <label>Width<input type="number" min="40" v-model.number="compForm.w"></label>
+          <label>Height<input type="number" min="30" v-model.number="compForm.h"></label>
+          <div class="hint">Has inlet (left) + outlet (right) ports so it links like any component.</div>
+          <button class="primary" @click="saveCustomComp">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI generate -->
+    <div v-if="ai.open" class="fsmodal" @click.self="ai.open = false">
+      <div class="dlg">
+        <div class="fshead"><b>🤖 Generate from prompt</b><button @click="ai.open = false">✕</button></div>
+        <div class="dlgbody">
+          <textarea v-model="ai.text" rows="3" placeholder="e.g. 2 tanks, 3 pumps, 2 valves, a flow meter, a control and a chart"></textarea>
+          <div class="hint">Local parser: reads component types + counts and builds a connected chain. (Swap in an LLM for richer prompts.)</div>
+          <button class="primary" @click="generateFromPrompt">Generate</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -845,6 +943,20 @@ onUnmounted(() => {
 .builder.dark .cov, .builder.dark .chartov { background: #1e293b; border-color: #334155; }
 .builder.dark .covhdr, .builder.dark .chdr { color: #e2e8f0; border-color: #334155; }
 .builder.dark .covhdr { border-bottom-color: #334155; }
+/* custom components + AI + dialogs */
+.toolbar button.ai { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.customrow { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 6px; }
+.ccdel { color: #ef4444; font-weight: 700; padding: 0 4px; }
+.newcomp { width: 100%; border-style: dashed !important; color: #6366f1 !important; }
+.dlg { background: #fff; border-radius: 10px; width: min(420px, 92vw); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.dlgbody { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.dlgbody label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #475569; }
+.dlgbody input, .dlgbody textarea { border: 1px solid #cbd5e1; border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
+.dlgbody input[type=color] { height: 30px; padding: 1px; }
+.dlgbody .primary { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.builder.dark .dlg { background: #1e293b; }
+.builder.dark .dlgbody label { color: #cbd5e1; }
+.builder.dark .dlgbody input, .builder.dark .dlgbody textarea { background: #0f172a; color: #e2e8f0; border-color: #334155; }
 </style>
 
 <style>
