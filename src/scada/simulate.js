@@ -14,10 +14,10 @@ export function setTankMarks(elm) {
   elm.attr('markHi', { y1: yHi, y2: yHi, stroke: '#dc2626' })
 }
 
-function tank(elm, isHopper, nodeFlow, outletActive) {
+function tank(elm, isHopper, inflow, outflow) {
   // capacity follows the balance of inflow vs outflow; idle tanks sit in a 90-95 mock band
   let lvl = elm.get('level') ?? 60
-  const filling = !!nodeFlow[elm.id], draining = !!outletActive[elm.id]
+  const filling = !!inflow[elm.id], draining = !!outflow[elm.id]
   if (filling && !draining) lvl = clamp(lvl + rnd(1.5, 3.5), 8, 96)
   else if (draining && !filling) lvl = clamp(lvl - rnd(1.5, 3.5), 8, 96)
   else if (filling && draining) lvl = drift(lvl, 8, 96, 1.5)
@@ -131,15 +131,22 @@ function controlMap(graph) {
   return m
 }
 
-// Propagate flow downstream from sources (tanks above their mark, zones, un-fed pumps).
-// A pump/valve only PASSES flow if water actually reaches it — so a dry tank kills the
-// whole downstream path. Returns per-pipe live + per-element "has water" map.
+// Two-pass flow solver:
+//  SUPPLY (forward): water flows downstream from sources (tank above mark, zone, un-fed pump),
+//    blocked by closed valves / off / control-0 → nodeFlow[id] = water reaches id.
+//  DEMAND (backward): a node can discharge only if a downstream OPEN path reaches a sink
+//    (zone / tank / hopper / open pipe end) → canDrain[id].
+//  A pipe flows iff its source emits AND its target can drain. So closing a valve removes the
+//  downstream demand → the upstream pipe stops and the tank fills; opening it lets it drain.
 function propagateFlow(graph, ctrlPct) {
   const links = graph.getLinks().filter(l => l.get('type') === 's.FlowPipe')
-  const inbound = {}
-  links.forEach(l => { const t = l.target() && l.target().id; if (t) inbound[t] = (inbound[t] || 0) + 1 })
-  const nodeFlow = {}
-  const linkLive = new Map()
+  const inbound = {}, outgoing = {}
+  links.forEach(l => {
+    const s = l.source() && l.source().id, t = l.target() && l.target().id
+    if (t) inbound[t] = (inbound[t] || 0) + 1
+    if (s) outgoing[s] = (outgoing[s] || 0) + 1
+  })
+  const nodeFlow = {}, canDrain = {}
   const gated = id => ctrlPct[id] != null && ctrlPct[id] <= 0 // control closed this component
   function emits(node, port) {
     const t = node.get('type')
@@ -152,6 +159,13 @@ function propagateFlow(graph, ctrlPct) {
     if (t === 's.Valve') return node.get('open') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
     return !!nodeFlow[node.id] // tap / flow meter / pass-through: only if fed
   }
+  const canPass = node => {
+    const t = node.get('type')
+    if (t === 's.Valve') return !!node.get('open')
+    if (t === 's.Pump') return !!node.get('on') && !gated(node.id)
+    return true
+  }
+  // SUPPLY forward
   let changed = true, guard = 0
   while (changed && guard < 200) {
     changed = false; guard++
@@ -159,10 +173,30 @@ function propagateFlow(graph, ctrlPct) {
       const s = l.source(), tg = l.target(); const sId = s && s.id, tId = tg && tg.id
       if (!sId || !tId) continue
       const sNode = graph.getCell(sId); if (!sNode) continue
-      const live = emits(sNode, s.port)
-      linkLive.set(l.id, live)
-      if (live && !nodeFlow[tId]) { nodeFlow[tId] = true; changed = true }
+      if (emits(sNode, s.port) && !nodeFlow[tId]) { nodeFlow[tId] = true; changed = true }
     }
+  }
+  // DEMAND backward — seed sinks (zone/tank/hopper) and open pipe ends (no outgoing pipe)
+  graph.getElements().forEach(n => {
+    const t = n.get('type')
+    if (t === 's.Zone' || t === 's.Cyl' || t === 's.Hopper' || !outgoing[n.id]) canDrain[n.id] = true
+  })
+  changed = true; guard = 0
+  while (changed && guard < 200) {
+    changed = false; guard++
+    for (const l of links) {
+      const s = l.source(), tg = l.target(); const sId = s && s.id, tId = tg && tg.id
+      if (!sId || !tId || canDrain[sId]) continue
+      const sNode = graph.getCell(sId); if (!sNode) continue
+      if (canDrain[tId] && canPass(sNode)) { canDrain[sId] = true; changed = true }
+    }
+  }
+  // a pipe carries flow only with supply at source AND demand at target
+  const linkLive = new Map()
+  for (const l of links) {
+    const s = l.source(), tg = l.target(); const sId = s && s.id, tId = tg && tg.id
+    const sNode = sId && graph.getCell(sId)
+    linkLive.set(l.id, !!(sNode && tId && emits(sNode, s.port) && canDrain[tId]))
   }
   return { linkLive, nodeFlow, inbound }
 }
@@ -188,22 +222,24 @@ export function refreshLinks(graph) {
 
 export function simulateTick(graph) {
   const ctrlPct = controlMap(graph)
-  const { linkLive, nodeFlow, inbound } = propagateFlow(graph, ctrlPct)
-  // a tank is "draining" if any of its outlet pipes is live
-  const outletActive = {}
+  const { linkLive, inbound } = propagateFlow(graph, ctrlPct)
+  // derive actual through-flow at each element from the SOLVED pipes (supply ∧ demand)
+  const inflow = {}, outflow = {}, flowing = {}
   graph.getLinks().forEach(l => {
     if (l.get('type') !== 's.FlowPipe' || !linkLive.get(l.id)) return
-    const sId = l.source() && l.source().id; if (sId) outletActive[sId] = true
+    const s = l.source() && l.source().id, t = l.target() && l.target().id
+    if (s) { outflow[s] = true; flowing[s] = true }
+    if (t) { inflow[t] = true; flowing[t] = true }
   })
   graph.getElements().forEach(elm => {
     switch (elm.get('type')) {
-      case 's.Cyl': tank(elm, false, nodeFlow, outletActive); break
-      case 's.Hopper': tank(elm, true, nodeFlow, outletActive); break
-      case 's.Pump': pump(elm, nodeFlow[elm.id] || !inbound[elm.id]); break
+      case 's.Cyl': tank(elm, false, inflow, outflow); break
+      case 's.Hopper': tank(elm, true, inflow, outflow); break
+      case 's.Pump': pump(elm, flowing[elm.id] || !inbound[elm.id]); break
       case 's.Valve': valve(elm); break
-      case 's.PG': gauge(elm, graph, nodeFlow, ctrlPct); break
-      case 's.Flow': flowMeter(elm, graph, nodeFlow, ctrlPct); break
-      case 's.Tap': tap(elm, graph, nodeFlow, ctrlPct); break
+      case 's.PG': gauge(elm, graph, flowing, ctrlPct); break
+      case 's.Flow': flowMeter(elm, graph, flowing, ctrlPct); break
+      case 's.Tap': tap(elm, graph, flowing, ctrlPct); break
       case 's.Quality': quality(elm); break
     }
   })
