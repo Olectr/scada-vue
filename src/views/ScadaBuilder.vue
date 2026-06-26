@@ -304,6 +304,7 @@ function driveFor(id, open) {
 // --- on-canvas live charts: plot every tank/hopper's current capacity (%) over time ---
 const chartsUi = ref([])
 const tankHist = reactive({}) // tankId -> level history (number[])
+const tankRev = ref(0) // bumped on any tank-history change so tankSeries() recomputes reactively
 const TANK_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
 function tanksInGraph() { return graph.getElements().filter(e => e.get('type') === 's.Cyl' || e.get('type') === 's.Hopper') }
 function seedTanks() {
@@ -311,6 +312,7 @@ function seedTanks() {
   tanksInGraph().forEach(e => { if (!tankHist[e.id]) tankHist[e.id] = Array(20).fill(Math.round(e.get('level') ?? 50)) })
   const ids = new Set(tanksInGraph().map(e => e.id))
   Object.keys(tankHist).forEach(id => { if (!ids.has(id)) delete tankHist[id] })
+  tankRev.value++
 }
 function tankTick() {
   if (!graph) return
@@ -318,9 +320,11 @@ function tankTick() {
     const a = tankHist[e.id] || []
     tankHist[e.id] = [...a, Math.round(e.get('level') ?? 0)].slice(-30)
   })
+  tankRev.value++
 }
 // one line per tank — label = tank name, value = its capacity %
 function tankSeries() {
+  tankRev.value // reactive dependency: re-run when tank set or history changes
   return tanksInGraph().map((e, i) => ({
     label: nameOf(e), color: TANK_COLORS[i % TANK_COLORS.length],
     fill: i === 0 ? 'rgba(59,130,246,.15)' : undefined, data: tankHist[e.id] || [],
