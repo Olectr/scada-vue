@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, FlowPipe, Leader, portsCfg } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks } from '../scada/simulate'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
 const host = ref(null)
@@ -175,8 +175,26 @@ const sel = reactive({
   simMin: 0, simMax: 8, on: false, open: false, pct: 100,
   targets: [], targetOptions: [],
   showSlider: true, showOpen: true, showClose: true,
-  info: null, connections: [], angle: 0,
+  info: null, connections: [], angle: 0, tag: '',
 })
+const tagList = TAGS
+function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
+// pipe styling — separate selection for links (FlowPipe)
+const linkSel = reactive({ id: null, color: '#16a34a', width: 7 })
+function selectLink(m) {
+  if (!m) { linkSel.id = null; return }
+  selectEl(null)
+  linkSel.id = m.id
+  linkSel.color = m.attr('line/stroke') || '#16a34a'
+  linkSel.width = m.attr('line/strokeWidth') || 7
+}
+function applyPipe() {
+  const m = linkSel.id && graph.getCell(linkSel.id); if (!m) return
+  m.attr('line/stroke', linkSel.color)
+  m.attr('line/strokeWidth', Number(linkSel.width))
+  m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
+}
+function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
 const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label' }
 function elemValue(e) {
   switch (e.get('type')) {
@@ -215,6 +233,7 @@ function updateSelInfo() {
 }
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
+  linkSel.id = null // element (or blank) selection clears any pipe selection
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
@@ -226,6 +245,7 @@ function selectEl(model) {
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
   sel.angle = typeof model.angle === 'function' ? Math.round(model.angle()) : 0
+  sel.tag = model.get('tag') || ''
   if (t === 's.Control') {
     sel.targets = (model.get('targets') || []).slice()
     // pumps and valves are the components a control can open/close
@@ -510,7 +530,8 @@ onMounted(() => {
     }
     selectEl(view.model)
   })
-  paper.on('blank:pointerclick', () => { if (mode.value === 'edit') selectEl(null) })
+  paper.on('blank:pointerclick', () => { if (mode.value === 'edit') { selectEl(null); linkSel.id = null } })
+  paper.on('link:pointerclick', (lv) => { if (mode.value === 'edit' && lv.model.get('type') === 's.FlowPipe') selectLink(lv.model) })
 
   // hover a pipe/leader in edit mode → show a remove (✕) button to delete that connection
   paper.on('link:mouseenter', (linkView) => {
@@ -631,7 +652,17 @@ onUnmounted(() => {
       </div>
       <aside class="inspector">
         <div class="ptitle">Inspector</div>
-        <div v-if="!sel.id" class="empty">Select a component.</div>
+        <div v-if="linkSel.id" class="fields">
+          <div class="tlabel">Pipe</div>
+          <label>Color
+            <input type="color" v-model="linkSel.color" @input="applyPipe">
+          </label>
+          <label>Width
+            <input type="range" min="3" max="16" v-model.number="linkSel.width" @input="applyPipe">
+          </label>
+          <button class="del" @click="deletePipe">🗑 Delete pipe</button>
+        </div>
+        <div v-else-if="!sel.id" class="empty">Select a component or pipe.</div>
         <div v-else class="fields">
           <div v-if="sel.info" class="info">
             <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
@@ -658,6 +689,12 @@ onUnmounted(() => {
             </label>
             <label>{{ sel.type === 's.PG' ? 'Max' : 'High mark %' }}
               <input type="number" v-model="sel.simMax" @input="applyRange">
+            </label>
+            <label>Bind live tag
+              <select v-model="sel.tag" @change="applyTag">
+                <option value="">— simulated —</option>
+                <option v-for="t in tagList" :key="t.path" :value="t.path">{{ t.label }}</option>
+              </select>
             </label>
           </template>
           <label v-if="sel.isPump" class="chk">
@@ -762,7 +799,8 @@ onUnmounted(() => {
 .fields { display: flex; flex-direction: column; gap: 10px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; font-weight: 600; }
 .fields label.chk { flex-direction: row; align-items: center; gap: 6px; }
-.fields input[type=text], .fields input[type=number] { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.fields input[type=text], .fields input[type=number], .fields select { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.fields input[type=color] { width: 100%; height: 28px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 1px; cursor: pointer; }
 .fields input[type=range] { accent-color: #2563eb; }
 .pctval { font-size: 11px; color: #2563eb; }
 .del { border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; border-radius: 5px; padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }

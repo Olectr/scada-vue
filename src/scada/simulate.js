@@ -1,8 +1,21 @@
 // Generic per-element-type simulation for the SCADA builder.
 // Auto-generates drifting demo values and animates pipe flow based on the
 // pipe's SOURCE element state (simple source-check, not a full upstream chain).
-import { clamp, drift, rnd } from '../composables/usePlantData'
+import { clamp, drift, rnd, state } from '../composables/usePlantData'
 import { arc } from './shapes'
+
+// curated live tags from the plant data singleton — bindable to tanks (%) and gauges (value)
+export const TAGS = [
+  { label: 'Water · Tank 1 level %', path: 'water.lvl1' },
+  { label: 'Water · Tank 2 level %', path: 'water.lvl2' },
+  { label: 'Water · Pump 1 pressure', path: 'water.p1' },
+  { label: 'Water · Header pressure', path: 'water.prs' },
+  { label: 'Boiler · Drum level %', path: 'boiler.bDrum' },
+  { label: 'Boiler · Steam pressure', path: 'boiler.bPrs' },
+  { label: 'Air · System pressure', path: 'air.prs' },
+  { label: 'Solar · Irradiance', path: 'solar.irr' },
+]
+function readTag(path) { return path.split('.').reduce((o, k) => (o == null ? o : o[k]), state) }
 
 // draw the sim-range marker lines on a cylinder tank's 0..100 scale (window y 36..214)
 export function setTankMarks(elm) {
@@ -17,11 +30,16 @@ export function setTankMarks(elm) {
 function tank(elm, isHopper, inflow, outflow) {
   // capacity follows the balance of inflow vs outflow; idle tanks sit in a 90-95 mock band
   let lvl = elm.get('level') ?? 60
-  const filling = !!inflow[elm.id], draining = !!outflow[elm.id]
-  if (filling && !draining) lvl = clamp(lvl + rnd(1.5, 3.5), 8, 96)
-  else if (draining && !filling) lvl = clamp(lvl - rnd(1.5, 3.5), 8, 96)
-  else if (filling && draining) lvl = drift(lvl, 8, 96, 1.5)
-  else lvl = lvl < 90 ? clamp(lvl + rnd(1, 2.5), 8, 95) : drift(lvl, 90, 95, 1.2) // idle: gently climb into 90-95 mock band
+  const tag = elm.get('tag')
+  if (tag) {
+    lvl = clamp(Number(readTag(tag)) || 0, 0, 100) // bound to a real tag
+  } else {
+    const filling = !!inflow[elm.id], draining = !!outflow[elm.id]
+    if (filling && !draining) lvl = clamp(lvl + rnd(1.5, 3.5), 8, 96)
+    else if (draining && !filling) lvl = clamp(lvl - rnd(1.5, 3.5), 8, 96)
+    else if (filling && draining) lvl = drift(lvl, 8, 96, 1.5)
+    else lvl = lvl < 90 ? clamp(lvl + rnd(1, 2.5), 8, 95) : drift(lvl, 90, 95, 1.2) // idle: gently climb into 90-95 mock band
+  }
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
   else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
@@ -66,7 +84,8 @@ function gaugePressure(gaugeElm, graph, nodeFlow, ctrlPct) {
 
 function gauge(elm, graph, nodeFlow, ctrlPct) {
   const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
-  let v = gaugePressure(elm, graph, nodeFlow, ctrlPct) // pump pressure via the tap; null if not connected
+  const tag = elm.get('tag')
+  let v = tag ? (Number(readTag(tag)) || 0) : gaugePressure(elm, graph, nodeFlow, ctrlPct) // bound tag or pump pressure via tap
   if (v == null) v = 0
   v = Math.max(lo, Math.min(hi, v))
   elm.set('value', v, { silent: true })
