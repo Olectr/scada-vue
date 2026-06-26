@@ -4,12 +4,22 @@
 import { clamp, drift } from '../composables/usePlantData'
 import { arc } from './shapes'
 
+// draw the sim-range marker lines on a cylinder tank's 0..100 scale (window y 36..214)
+export function setTankMarks(elm) {
+  if (elm.get('type') !== 's.Cyl') return
+  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 95
+  const Y = 36, H = 178
+  const yLo = Y + H * (1 - lo / 100), yHi = Y + H * (1 - hi / 100)
+  elm.attr('markLo', { y1: yLo, y2: yLo, stroke: '#f59e0b' })
+  elm.attr('markHi', { y1: yHi, y2: yHi, stroke: '#dc2626' })
+}
+
 function tank(elm, isHopper) {
   const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 95
   const lvl = drift(elm.get('level') ?? 60, lo, hi, 2)
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
-  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
+  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }); setTankMarks(elm) }
 }
 
 // Visual-only helpers (no value drift) — shared so the builder's edit-mode
@@ -33,9 +43,28 @@ function valve(elm) {
   setValveVisual(elm)
 }
 
-function gauge(elm) {
+// follow a gauge's dashed leader → tap → flow-connected pump and read its live pressure
+function gaugePressure(gaugeElm, graph) {
+  const leaders = graph.getConnectedLinks(gaugeElm).filter(l => l.get('type') === 's.Leader')
+  for (const l of leaders) {
+    const a = l.source() && l.source().id, b = l.target() && l.target().id
+    const tapId = a === gaugeElm.id ? b : a
+    const tap = tapId && graph.getCell(tapId)
+    if (!tap || tap.get('type') !== 's.Tap') continue
+    for (const fl of graph.getConnectedLinks(tap).filter(x => x.get('type') === 's.FlowPipe')) {
+      const s = fl.source() && fl.source().id, t = fl.target() && fl.target().id
+      const o = graph.getCell(s === tap.id ? t : s)
+      if (o && o.get('type') === 's.Pump') return o.get('pressure') || 0
+    }
+  }
+  return null
+}
+
+function gauge(elm, graph) {
   const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
-  const v = drift(elm.get('value') ?? (hi / 2), lo, hi, 0.25)
+  let v = gaugePressure(elm, graph) // actual pump pressure via the tap; null if not connected
+  if (v == null) v = 0
+  v = Math.max(lo, Math.min(hi, v))
   elm.set('value', v, { silent: true })
   const frac = hi > lo ? (v - lo) / (hi - lo) : 0
   const col = frac > 0.85 ? '#dc2626' : '#16a34a'
@@ -99,7 +128,7 @@ export function simulateTick(graph) {
       case 's.Hopper': tank(elm, true); break
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
-      case 's.PG': gauge(elm); break
+      case 's.PG': gauge(elm, graph); break
       case 's.Quality': quality(elm); break
     }
   })

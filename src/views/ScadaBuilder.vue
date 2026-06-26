@@ -1,8 +1,8 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, FlowPipe, Leader, portsCfg } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual } from '../scada/simulate'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
 const host = ref(null)
@@ -92,6 +92,7 @@ const palette = [
   { type: 'pump', label: 'Pump', ico: '⚙' },
   { type: 'valve', label: 'Valve', ico: '▽' },
   { type: 'gauge', label: 'Pressure Gauge', ico: 'Ⓟ' },
+  { type: 'tap', label: 'Pressure Tap', ico: '◉' },
   { type: 'control', label: 'Control', ico: '🎚' },
   { type: 'zone', label: 'Zone', ico: '⚑' },
   { type: 'quality', label: 'Water Quality', ico: '🧪' },
@@ -104,13 +105,14 @@ function nextName(base) { counters[base] = (counters[base] || 0) + 1; return `${
 function makeEl(type) {
   const x = STAGE_W / 2 - 75, y = STAGE_H / 2 - 100
   switch (type) {
-    case 'tank': return new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 95 })
+    case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 95 }); setTankMarks(tk); return tk }
     case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95 })
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2 })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true })
     case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
+    case 'tap': return new Tap({ position: { x, y }, ports: portsCfg([{ id: 'p', x: 11, y: 11 }], true) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
   }
@@ -130,7 +132,7 @@ const sel = reactive({
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [],
 })
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -197,6 +199,7 @@ function applyRange() {
   const lo = Number(sel.simMin), hi = Number(sel.simMax)
   if (!Number.isNaN(lo)) m.set('simMin', lo)
   if (!Number.isNaN(hi)) m.set('simMax', hi)
+  if (m.get('type') === 's.Cyl') setTankMarks(m) // move the range marker lines live
 }
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
@@ -367,7 +370,12 @@ onMounted(() => {
     linkPinning: false,
     snapLinks: { radius: 20 },
     validateMagnet: () => mode.value === 'edit',
-    validateConnection: (cv, magnetS, tv, magnetT) => mode.value === 'edit' && !!magnetT && tv !== cv && tv.model.isElement(),
+    validateConnection: (cv, magnetS, tv, magnetT) => {
+      if (mode.value !== 'edit' || !magnetT || tv === cv || !tv.model.isElement()) return false
+      // a pressure gauge's dashed leader may attach ONLY to a pressure tap
+      if (cv.model.get('type') === 's.PG') return tv.model.get('type') === 's.Tap'
+      return true
+    },
     interactive: () => (mode.value === 'edit' ? { linkMove: false } : false),
   })
 

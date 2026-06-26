@@ -37,6 +37,9 @@ export const CylTank = joint.dia.Element.define('s.Cyl', { size: { width: 150, h
   capTop: { cx: 'calc(w/2)', cy: 0, rx: 'calc(w/2)', ry: 13, fill: SILVER, stroke: '#7c858f' },
   win: { x: 44, y: 36, width: 32, height: 178, fill: '#d7dbe4', stroke: '#6b7280', strokeWidth: 1, rx: 2 },
   fill: { x: 46, width: 28, fill: '#16a34a' },
+  // sim-range markers on the scale (stroke set by the builder via setTankMarks; hidden by default so other screens are unaffected)
+  markLo: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
+  markHi: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
   name: { x: 'calc(w/2)', y: 'calc(h+30)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
   legL: { d: 'M 32 calc(h) l -8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
   legR: { d: 'M calc(w-32) calc(h) l 8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
@@ -44,6 +47,7 @@ export const CylTank = joint.dia.Element.define('s.Cyl', { size: { width: 150, h
   { tagName: 'path', selector: 'legL' }, { tagName: 'path', selector: 'legR' },
   { tagName: 'rect', selector: 'body' }, { tagName: 'ellipse', selector: 'capBot' }, { tagName: 'ellipse', selector: 'capTop' },
   { tagName: 'rect', selector: 'win' }, { tagName: 'rect', selector: 'fill' },
+  { tagName: 'line', selector: 'markLo' }, { tagName: 'line', selector: 'markHi' },
   ...scaleNodes, { tagName: 'text', selector: 'name' },
 ] })
 
@@ -90,6 +94,12 @@ export const PGauge = joint.dia.Element.define('s.PG', { size: { width: 96, heig
 export const Control = joint.dia.Element.define('s.Control', { size: { width: 130, height: 120 }, attrs: {
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
+
+// New: pressure tap — small inline connector on a pipe; a pressure gauge attaches here.
+export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 22, height: 22 }, attrs: {
+  ring: { cx: 11, cy: 11, r: 10, fill: '#fff', stroke: '#5b6772', strokeWidth: 2 },
+  dot: { cx: 11, cy: 11, r: 4, fill: '#5b6772' },
+} }, { markup: svg`<circle @selector="ring"/><circle @selector="dot"/>` })
 
 // New: water-quality analyzer — live pH / Turbidity / Cl / DO readout.
 export const Quality = joint.dia.Element.define('s.Quality', { size: { width: 156, height: 118 }, attrs: {
@@ -148,6 +158,7 @@ Object.assign(joint.shapes.s, {
   Control,
   Chart,
   Quality,
+  Tap,
   FlowPipe,
   Leader,
 })
