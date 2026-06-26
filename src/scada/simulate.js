@@ -134,6 +134,26 @@ function tap(elm, graph, nodeFlow, ctrlPct) {
   elm.attr('val/text', bar.toFixed(1) + ' bar')
 }
 
+// custom component live behavior: static | onoff | openclose | level | meter
+function custom(elm) {
+  const beh = elm.get('behavior') || 'static', h = elm.size().height
+  if (beh === 'level') {
+    const lvl = drift(elm.get('level') ?? 60, elm.get('vmin') ?? 0, elm.get('vmax') ?? 100, 2)
+    elm.set('level', lvl, { silent: true })
+    elm.attr('fill', { opacity: 0.45, y: 3 + (h - 6) * (1 - lvl / 100), height: (h - 6) * lvl / 100 })
+    elm.attr('val', { opacity: 1, text: Math.round(lvl) + '%' })
+  } else if (beh === 'meter') {
+    const lo = elm.get('vmin') ?? 0, hi = elm.get('vmax') ?? 10
+    const v = drift(elm.get('value') ?? (lo + hi) / 2, lo, hi, (hi - lo) / 40 || 0.2)
+    elm.set('value', v, { silent: true })
+    elm.attr('val', { opacity: 1, text: v.toFixed(1) + ' ' + (elm.get('unit') || '') })
+  } else if (beh === 'onoff') {
+    elm.attr('ind', { opacity: 1, fill: elm.get('on') ? '#16a34a' : '#cbd5e1' })
+  } else if (beh === 'openclose') {
+    elm.attr('ind', { opacity: 1, fill: elm.get('open') ? '#16a34a' : '#cbd5e1' })
+  }
+}
+
 function quality(elm) {
   const ph = drift(elm.get('ph') ?? 7.2, 6.6, 7.8, 0.05); elm.set('ph', ph, { silent: true }); elm.attr('phV/text', ph.toFixed(2))
   const tb = drift(elm.get('turb') ?? 0.8, 0.2, 1.6, 0.08); elm.set('turb', tb, { silent: true }); elm.attr('tbV/text', tb.toFixed(2) + ' NTU')
@@ -178,12 +198,21 @@ function propagateFlow(graph, ctrlPct) {
     if (t === 's.Zone') return true // supply source
     if (t === 's.Pump') return node.get('on') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
     if (t === 's.Valve') return node.get('open') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
+    if (t === 's.Custom') {
+      const b = node.get('behavior')
+      if (b === 'onoff') return node.get('on') && (nodeFlow[node.id] || !inbound[node.id])
+      if (b === 'openclose') return node.get('open') && (nodeFlow[node.id] || !inbound[node.id])
+    }
     return !!nodeFlow[node.id] // tap / flow meter / pass-through: only if fed
   }
   const canPass = node => {
     const t = node.get('type')
     if (t === 's.Valve') return !!node.get('open') && !gated(node.id)
     if (t === 's.Pump') return !!node.get('on') && !gated(node.id)
+    if (t === 's.Custom') {
+      if (node.get('behavior') === 'onoff') return !!node.get('on')
+      if (node.get('behavior') === 'openclose') return !!node.get('open')
+    }
     return true
   }
   // passive instruments draw no volumetric flow → never a hydraulic sink, even at a dead end
@@ -264,6 +293,7 @@ export function simulateTick(graph) {
       case 's.Flow': flowMeter(elm, graph, flowing, ctrlPct); break
       case 's.Tap': tap(elm, graph, flowing, ctrlPct); break
       case 's.Quality': quality(elm); break
+      case 's.Custom': custom(elm); break
     }
   })
   animateLinks(graph, ctrlPct, linkLive)

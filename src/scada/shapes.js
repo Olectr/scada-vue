@@ -95,11 +95,32 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
-// New: user-defined custom component — a labelled, coloured box with inlet/outlet ports.
+// New: user-defined custom component — configurable shape, icon, ports, and live behavior.
 export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, height: 60 }, attrs: {
-  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5 },
-  name: { x: 'calc(w/2)', y: 'calc(h/2)', textAnchor: 'middle', textVerticalAnchor: 'middle', fill: '#3730a3', fontSize: 12, fontWeight: 'bold', text: 'Custom' },
-} }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
+  bodyRect: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5 },
+  bodyEllipse: { cx: 'calc(w/2)', cy: 'calc(h/2)', rx: 'calc(w/2)', ry: 'calc(h/2)', fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5, opacity: 0 },
+  bodyPath: { d: '', fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5, opacity: 0 },
+  fill: { x: 3, width: 'calc(w-6)', y: 3, height: 0, fill: '#16a34a', opacity: 0 }, // level fill (behavior=level)
+  ind: { x: 'calc(w/2-8)', y: 'calc(h-13)', width: 16, height: 9, rx: 2, fill: '#16a34a', opacity: 0 }, // on/open indicator
+  icon: { x: 'calc(w/2)', y: 'calc(h/2-2)', textAnchor: 'middle', textVerticalAnchor: 'middle', fontSize: 20, text: '' },
+  val: { x: 'calc(w/2)', y: 'calc(h/2+14)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold', opacity: 0, text: '' },
+  name: { x: 'calc(w/2)', y: 'calc(h+14)', textAnchor: 'middle', fill: '#3730a3', fontSize: 12, fontWeight: 'bold', text: 'Custom' },
+} }, { markup: [
+  { tagName: 'rect', selector: 'bodyRect' },
+  { tagName: 'ellipse', selector: 'bodyEllipse' },
+  { tagName: 'path', selector: 'bodyPath' },
+  { tagName: 'rect', selector: 'fill' },
+  { tagName: 'rect', selector: 'ind' },
+  { tagName: 'text', selector: 'icon' },
+  { tagName: 'text', selector: 'val' },
+  { tagName: 'text', selector: 'name' },
+] })
+// path for non-rect/ellipse custom shapes
+export function customPath(shape, w, h) {
+  if (shape === 'diamond') return `M ${w / 2} 0 L ${w} ${h / 2} L ${w / 2} ${h} L 0 ${h / 2} Z`
+  if (shape === 'triangle') return `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`
+  return `M 0 8 Q 0 0 8 0 L ${w - 8} 0 Q ${w} 0 ${w} 8 L ${w} ${h - 8} Q ${w} ${h} ${w - 8} ${h} L 8 ${h} Q 0 ${h} 0 ${h - 8} Z`
+}
 
 // New: annotation label (sticky note) — free text on the canvas.
 export const Note = joint.dia.Element.define('s.Note', { size: { width: 150, height: 32 }, attrs: {

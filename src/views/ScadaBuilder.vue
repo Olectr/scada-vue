@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
@@ -82,6 +82,7 @@ function migrateCells() {
       e.resize(84, 48)
       e.set('ports', portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }, { id: 'p', x: 42, y: 24 }], true))
     }
+    if (e.get('type') === 's.Custom') renderCustom(e) // re-apply shape/icon/colors after load
   })
 }
 
@@ -169,28 +170,82 @@ function addComponent(type) {
   if (sel.isControl && (type === 'pump' || type === 'valve')) selectEl(selModel())
 }
 
-// --- user-defined custom components ---
+// --- user-defined custom components (flexible: shape, icon, ports, behavior) ---
 const CC_KEY = 'scada.builder.customComps'
 const customComps = ref([])
 function loadCustomComps() { try { customComps.value = JSON.parse(localStorage.getItem(CC_KEY) || '[]') } catch { customComps.value = [] } }
 function persistCustomComps() { localStorage.setItem(CC_KEY, JSON.stringify(customComps.value)) }
-const compForm = reactive({ open: false, label: 'My Part', color: '#e0e7ff', w: 96, h: 60 })
-function openCompForm() { compForm.open = true; compForm.label = 'My Part'; compForm.color = '#e0e7ff'; compForm.w = 96; compForm.h = 60 }
+const compForm = reactive({ open: false, label: '', shape: 'box', icon: '', color: '#e0e7ff', border: '#6366f1', w: 96, h: 60, behavior: 'static', vmin: 0, vmax: 100, unit: '', sides: { top: false, bottom: false, left: true, right: true } })
+function openCompForm() {
+  Object.assign(compForm, { open: true, label: 'My Part', shape: 'box', icon: '⚙', color: '#e0e7ff', border: '#6366f1', w: 96, h: 60, behavior: 'static', vmin: 0, vmax: 100, unit: '' })
+  compForm.sides = { top: false, bottom: false, left: true, right: true }
+}
 function saveCustomComp() {
   const label = (compForm.label || '').trim(); if (!label) return
-  customComps.value = [...customComps.value, { id: 'c' + Date.now(), label, color: compForm.color, w: Number(compForm.w) || 96, h: Number(compForm.h) || 60 }]
+  customComps.value = [...customComps.value, {
+    id: 'c' + Date.now(), label, shape: compForm.shape, icon: compForm.icon, color: compForm.color, border: compForm.border,
+    w: Number(compForm.w) || 96, h: Number(compForm.h) || 60, behavior: compForm.behavior,
+    vmin: Number(compForm.vmin) || 0, vmax: Number(compForm.vmax) || 100, unit: compForm.unit, sides: { ...compForm.sides },
+  }]
   persistCustomComps(); compForm.open = false
 }
 function deleteCustomComp(id) { customComps.value = customComps.value.filter(c => c.id !== id); persistCustomComps() }
+// apply a custom element's stored config to its visuals (run on create + on load)
+function renderCustom(el) {
+  const w = el.size().width, h = el.size().height, shape = el.get('shape') || 'box'
+  const fill = el.get('fillColor') || '#e0e7ff', border = el.get('borderColor') || '#6366f1'
+  el.attr('bodyRect/opacity', shape === 'box' ? 1 : 0)
+  el.attr('bodyEllipse/opacity', shape === 'circle' ? 1 : 0)
+  const usePath = shape === 'diamond' || shape === 'triangle' || shape === 'cylinder'
+  el.attr('bodyPath/opacity', usePath ? 1 : 0)
+  if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
+  const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
+  el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
+  el.attr('icon/text', el.get('icon') || '')
+}
+function customSidePorts(def, w, h) {
+  const s = def.sides || { left: true, right: true }, ps = []
+  if (s.top) ps.push({ id: 'top', x: w / 2, y: 0 })
+  if (s.bottom) ps.push({ id: 'bottom', x: w / 2, y: h })
+  if (s.left) ps.push({ id: 'left', x: 0, y: h / 2 })
+  if (s.right) ps.push({ id: 'right', x: w, y: h / 2 })
+  if (!ps.length) ps.push({ id: 'left', x: 0, y: h / 2 }, { id: 'right', x: w, y: h / 2 })
+  return ps
+}
 function makeCustom(def, x, y) {
-  const w = def.w, h = def.h
-  return new Custom({
+  const w = def.w || 96, h = def.h || 60
+  const el = new Custom({
     position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
-    attrs: { box: { fill: def.color }, name: { text: nextName(def.label) } },
-    ports: portsCfg([{ id: 'l', x: 0, y: h / 2 }, { id: 'r', x: w, y: h / 2 }], true),
+    attrs: { name: { text: nextName(def.label || 'Custom') } },
+    shape: def.shape || 'box', icon: def.icon || '', fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
+    behavior: def.behavior || 'static', vmin: def.vmin ?? 0, vmax: def.vmax ?? 100, unit: def.unit || '',
+    on: true, open: true, level: 60, value: ((def.vmin ?? 0) + (def.vmax ?? 100)) / 2,
+    ports: portsCfg(customSidePorts(def, w, h), true),
   })
+  renderCustom(el); return el
 }
 function addCustom(def) { if (!graph) return; graph.addCell(makeCustom(def)) }
+// component library export / import
+function exportCompLib() {
+  const blob = new Blob([JSON.stringify(customComps.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob); const a = document.createElement('a')
+  a.href = url; a.download = 'scada-components.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+}
+const libInput = ref(null)
+function pickCompLib() { if (libInput.value) libInput.value.click() }
+function importCompLib(e) {
+  const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return
+  const r = new FileReader()
+  r.onload = () => {
+    try {
+      const arr = JSON.parse(r.result); if (!Array.isArray(arr)) throw 0
+      const have = new Set(customComps.value.map(c => c.id))
+      customComps.value = [...customComps.value, ...arr.filter(c => c && c.id && !have.has(c.id))]
+      persistCustomComps()
+    } catch { alert('Invalid component library file.') }
+  }
+  r.readAsText(f)
+}
 
 // --- AI prompt → auto-generate a screen (local heuristic parser; swap in an LLM here) ---
 const ai = reactive({ open: false, text: '' })
@@ -593,10 +648,10 @@ onMounted(() => {
 
   paper.on('element:pointerclick', view => {
     if (mode.value === 'run') {
-      const m = view.model, t = m.get('type')
-      if (t !== 's.Pump' && t !== 's.Valve') return
-      if (t === 's.Pump') m.set('on', !m.get('on'))
-      else m.set('open', !m.get('open'))
+      const m = view.model, t = m.get('type'), beh = m.get('behavior')
+      if (t === 's.Pump' || (t === 's.Custom' && beh === 'onoff')) m.set('on', !m.get('on'))
+      else if (t === 's.Valve' || (t === 's.Custom' && beh === 'openclose')) m.set('open', !m.get('open'))
+      else return
       simulateTick(graph)
       return
     }
@@ -697,6 +752,11 @@ onUnmounted(() => {
           <button class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)">✕</button>
         </div>
         <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm">＋ New component</button>
+        <div class="liblinks">
+          <a @click="exportCompLib">⬇ Export lib</a>
+          <a @click="pickCompLib">⬆ Import lib</a>
+          <input ref="libInput" type="file" accept="application/json,.json" style="display:none" @change="importCompLib">
+        </div>
         <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
       </aside>
       <div ref="fitEl" class="fit">
@@ -841,10 +901,47 @@ onUnmounted(() => {
         <div class="fshead"><b>New custom component</b><button @click="compForm.open = false">✕</button></div>
         <div class="dlgbody">
           <label>Name<input type="text" v-model="compForm.label"></label>
-          <label>Color<input type="color" v-model="compForm.color"></label>
-          <label>Width<input type="number" min="40" v-model.number="compForm.w"></label>
-          <label>Height<input type="number" min="30" v-model.number="compForm.h"></label>
-          <div class="hint">Has inlet (left) + outlet (right) ports so it links like any component.</div>
+          <div class="frow">
+            <label>Shape
+              <select v-model="compForm.shape">
+                <option value="box">Box</option><option value="circle">Circle</option>
+                <option value="diamond">Diamond</option><option value="triangle">Triangle</option>
+                <option value="cylinder">Cylinder</option>
+              </select>
+            </label>
+            <label>Icon/emoji<input type="text" v-model="compForm.icon" maxlength="2" placeholder="⚙"></label>
+          </div>
+          <div class="frow">
+            <label>Fill<input type="color" v-model="compForm.color"></label>
+            <label>Border<input type="color" v-model="compForm.border"></label>
+          </div>
+          <div class="frow">
+            <label>Width<input type="number" min="40" v-model.number="compForm.w"></label>
+            <label>Height<input type="number" min="30" v-model.number="compForm.h"></label>
+          </div>
+          <div>
+            <div class="tlabel">Ports</div>
+            <div class="sides">
+              <label class="chk"><input type="checkbox" v-model="compForm.sides.top"> Top</label>
+              <label class="chk"><input type="checkbox" v-model="compForm.sides.bottom"> Bottom</label>
+              <label class="chk"><input type="checkbox" v-model="compForm.sides.left"> Left</label>
+              <label class="chk"><input type="checkbox" v-model="compForm.sides.right"> Right</label>
+            </div>
+          </div>
+          <label>Behavior (live)
+            <select v-model="compForm.behavior">
+              <option value="static">Static</option>
+              <option value="onoff">On / Off (click to toggle, gates flow)</option>
+              <option value="openclose">Open / Close (gates flow)</option>
+              <option value="level">Level (fills/drains, shows %)</option>
+              <option value="meter">Meter (shows live value)</option>
+            </select>
+          </label>
+          <div v-if="compForm.behavior === 'meter' || compForm.behavior === 'level'" class="frow">
+            <label>Min<input type="number" v-model.number="compForm.vmin"></label>
+            <label>Max<input type="number" v-model.number="compForm.vmax"></label>
+            <label v-if="compForm.behavior === 'meter'">Unit<input type="text" v-model="compForm.unit" maxlength="6" placeholder="bar"></label>
+          </div>
           <button class="primary" @click="saveCustomComp">Create</button>
         </div>
       </div>
@@ -965,6 +1062,12 @@ onUnmounted(() => {
 .dlgbody input, .dlgbody textarea { border: 1px solid #cbd5e1; border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
 .dlgbody input[type=color] { height: 30px; padding: 1px; }
 .dlgbody .primary { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.frow { display: flex; gap: 8px; }
+.frow label { flex: 1; }
+.sides { display: flex; flex-wrap: wrap; gap: 8px; }
+.sides .chk { flex-direction: row; align-items: center; gap: 4px; font-weight: 500; }
+.liblinks { display: flex; gap: 12px; margin-top: 6px; }
+.liblinks a { font-size: 11px; color: #6366f1; cursor: pointer; text-decoration: underline; }
 .builder.dark .dlg { background: #1e293b; }
 .builder.dark .dlgbody label { color: #cbd5e1; }
 .builder.dark .dlgbody input, .builder.dark .dlgbody textarea { background: #0f172a; color: #e2e8f0; border-color: #334155; }
