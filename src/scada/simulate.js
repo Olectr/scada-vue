@@ -102,7 +102,7 @@ function flowMeter(elm, graph, nodeFlow, ctrlPct) {
   // flow shown only when water actually reaches the meter; magnitude from the driving pump
   const mph = nodeFlow[elm.id] ? Math.round(connectedPumpPressure(elm, graph, ctrlPct) * 120) : 0
   elm.set('flow', mph, { silent: true })
-  elm.set('total', (elm.get('total') || 0) + mph / 3600, { silent: true }) // accumulate m³
+  if (mph > 0) elm.set('total', (elm.get('total') || 0) + mph / 3600, { silent: true }) // accumulate m³
   elm.attr('val/text', mph + ' m³/h')
   elm.attr('rotor/class', mph > 0 ? 'wp-spin' : '')
 }

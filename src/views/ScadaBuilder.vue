@@ -51,6 +51,7 @@ function newLayout() {
 function loadTemplate(kind) {
   if (!kind || !graph) return
   if (graph.getElements().length && !confirm('Replace the canvas with this template?')) return
+  mode.value = 'edit'
   graph.clear(); for (const k in counters) delete counters[k]
   const mk = type => { const e = makeEl(type); graph.addCell(e); return e }
   const link = (s, sp, t, tp) => graph.addCell(new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } }))
@@ -158,7 +159,7 @@ function makeEl(type) {
     case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
-    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: 'Label text' } } })
+    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } } })
   }
 }
 function addComponent(type) {
@@ -195,10 +196,10 @@ function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/tex
 function updateSelInfo() {
   const m = selModel()
   if (!m) { sel.info = null; sel.connections = []; return }
-  let extra = null
-  if (m.get('type') === 's.Flow') extra = 'Total ' + Math.round(m.get('total') || 0) + ' m³'
-  else if (m.get('type') === 's.Pump') { const s = m.get('runtime') || 0; extra = 'Run ' + Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm' }
-  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m), extra }
+  let extra = null, extraLabel = ''
+  if (m.get('type') === 's.Flow') { extra = Math.round(m.get('total') || 0) + ' m³'; extraLabel = 'Total' }
+  else if (m.get('type') === 's.Pump') { const s = m.get('runtime') || 0; extra = Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm'; extraLabel = 'Runtime' }
+  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m), extra, extraLabel }
   if (m.get('type') === 's.Control') {
     sel.connections = (m.get('targets') || []).map(id => {
       const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
@@ -635,7 +636,7 @@ onUnmounted(() => {
           <div v-if="sel.info" class="info">
             <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
             <div class="irow"><span>Value</span><b class="ival">{{ sel.info.value }}</b></div>
-            <div v-if="sel.info.extra" class="irow"><span>Total</span><b>{{ sel.info.extra }}</b></div>
+            <div v-if="sel.info.extra" class="irow"><span>{{ sel.info.extraLabel }}</span><b>{{ sel.info.extra }}</b></div>
             <div class="irow"><span>ID</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
           </div>
           <label v-if="sel.hasName">Name
