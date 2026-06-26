@@ -393,6 +393,13 @@ onMounted(() => {
   })
   paper.on('blank:pointerclick', () => { if (mode.value === 'edit') selectEl(null) })
 
+  // hover a pipe/leader in edit mode → show a remove (✕) button to delete that connection
+  paper.on('link:mouseenter', (linkView) => {
+    if (mode.value !== 'edit') return
+    linkView.addTools(new joint.dia.ToolsView({ tools: [new joint.linkTools.Remove({ distance: '50%' })] }))
+  })
+  paper.on('link:mouseleave', (linkView) => { linkView.removeTools() })
+
   // a linked Control follows its target component when that component is dragged
   graph.on('change:position', followControls)
   // keep on-canvas overlays (controls + charts) positioned + in sync
@@ -445,7 +452,7 @@ onUnmounted(() => {
         <button v-for="p in palette" :key="p.type" :disabled="mode === 'run'" @click="addComponent(p.type)">
           <span class="ico">{{ p.ico }}</span> {{ p.label }}
         </button>
-        <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe.' : 'Click pumps/valves to toggle.' }}</div>
+        <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
       </aside>
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
