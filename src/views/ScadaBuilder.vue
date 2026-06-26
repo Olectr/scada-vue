@@ -82,7 +82,14 @@ function migrateCells() {
       e.resize(84, 48)
       e.set('ports', portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }, { id: 'p', x: 42, y: 24 }], true))
     }
-    if (e.get('type') === 's.Custom') renderCustom(e) // re-apply shape/icon/colors after load
+    if (e.get('type') === 's.Custom') {
+      if (!e.get('shape')) { // migrate a pre-flexible custom (had attrs.box.fill, no config props)
+        e.set('shape', 'box'); e.set('behavior', 'static')
+        const oldFill = e.attr('box/fill'); if (oldFill) e.set('fillColor', oldFill)
+        if (!e.get('borderColor')) e.set('borderColor', '#6366f1')
+      }
+      renderCustom(e) // re-apply shape/icon/colors after load
+    }
   })
 }
 
@@ -185,7 +192,8 @@ function saveCustomComp() {
   customComps.value = [...customComps.value, {
     id: 'c' + Date.now(), label, shape: compForm.shape, icon: compForm.icon, color: compForm.color, border: compForm.border,
     w: Number(compForm.w) || 96, h: Number(compForm.h) || 60, behavior: compForm.behavior,
-    vmin: Number(compForm.vmin) || 0, vmax: Number(compForm.vmax) || 100, unit: compForm.unit, sides: { ...compForm.sides },
+    vmin: Number.isNaN(Number(compForm.vmin)) ? 0 : Number(compForm.vmin),
+    vmax: Number.isNaN(Number(compForm.vmax)) ? 100 : Number(compForm.vmax), unit: compForm.unit, sides: { ...compForm.sides },
   }]
   persistCustomComps(); compForm.open = false
 }
@@ -202,6 +210,11 @@ function renderCustom(el) {
   const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
   el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
   el.attr('icon/text', el.get('icon') || '')
+  const beh = el.get('behavior')
+  if (beh === 'onoff' || beh === 'openclose') {
+    const onv = beh === 'onoff' ? el.get('on') : el.get('open')
+    el.attr('ind', { opacity: 1, fill: onv ? '#16a34a' : '#cbd5e1' })
+  } else el.attr('ind/opacity', 0)
 }
 function customSidePorts(def, w, h) {
   const s = def.sides || { left: true, right: true }, ps = []
@@ -375,9 +388,10 @@ function selectEl(model) {
   sel.tag = model.get('tag') || ''
   if (t === 's.Control') {
     sel.targets = (model.get('targets') || []).slice()
-    // pumps and valves are the components a control can open/close
+    // pumps, valves, and on/off|open/close custom components are drivable
     sel.targetOptions = graph.getElements()
-      .filter(e => e.id !== model.id && (e.get('type') === 's.Pump' || e.get('type') === 's.Valve'))
+      .filter(e => e.id !== model.id && (e.get('type') === 's.Pump' || e.get('type') === 's.Valve' ||
+        (e.get('type') === 's.Custom' && (e.get('behavior') === 'onoff' || e.get('behavior') === 'openclose'))))
       .map(e => ({ id: e.id, name: e.attr('name/text') || e.get('type') }))
     sel.showSlider = model.get('showSlider') !== false
     sel.showOpen = model.get('showOpen') !== false
@@ -429,6 +443,7 @@ function applyTargetVisual(t) {
   const ty = t.get('type')
   if (ty === 's.Pump') setPumpVisual(t)
   else if (ty === 's.Valve') setValveVisual(t)
+  else if (ty === 's.Custom') renderCustom(t)
 }
 // Control links: check/uncheck a target component
 function toggleTarget(id, checked) {
@@ -501,6 +516,7 @@ function driveFor(id, open) {
     const ty = t.get('type')
     if (ty === 's.Pump') t.set('on', open)
     else if (ty === 's.Valve') t.set('open', open)
+    else if (ty === 's.Custom') t.set(t.get('behavior') === 'openclose' ? 'open' : 'on', open)
     applyTargetVisual(t)
   })
   refreshLinks(graph)
@@ -649,11 +665,9 @@ onMounted(() => {
   paper.on('element:pointerclick', view => {
     if (mode.value === 'run') {
       const m = view.model, t = m.get('type'), beh = m.get('behavior')
-      if (t === 's.Pump' || (t === 's.Custom' && beh === 'onoff')) m.set('on', !m.get('on'))
-      else if (t === 's.Valve' || (t === 's.Custom' && beh === 'openclose')) m.set('open', !m.get('open'))
-      else return
-      simulateTick(graph)
-      return
+      if (t === 's.Pump' || (t === 's.Custom' && beh === 'onoff')) { m.set('on', !m.get('on')); simulateTick(graph); return }
+      if (t === 's.Valve' || (t === 's.Custom' && beh === 'openclose')) { m.set('open', !m.get('open')); simulateTick(graph); return }
+      selectEl(view.model); return // non-interactive: select to inspect live values
     }
     selectEl(view.model)
   })
