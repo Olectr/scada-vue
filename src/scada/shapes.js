@@ -95,12 +95,16 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
-// New: flow meter — inline meter showing live water flow (m³/h).
-export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 86, height: 46 }, attrs: {
-  body: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 9, fill: '#fff', stroke: '#5b6772', strokeWidth: 1.5 },
-  val: { x: 'calc(w/2)', y: 21, textAnchor: 'middle', fill: '#0e7490', fontSize: 15, fontWeight: 'bold', text: '0' },
-  unit: { x: 'calc(w/2)', y: 36, textAnchor: 'middle', fill: '#64748b', fontSize: 9, text: 'm³/h' },
-} }, { markup: svg`<rect @selector="body"/><text @selector="val"/><text @selector="unit"/>` })
+// New: flow meter — inline turbine meter (flanged pipe + dial) with live m³/h below.
+export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84, height: 48 }, attrs: {
+  flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
+  pipe: { x: 6, y: 18, width: 72, height: 12, fill: SILVER, stroke: '#7c858f' },
+  flR: { x: 76, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
+  head: { cx: 42, cy: 18, r: 16, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
+  dial: { cx: 42, cy: 18, r: 12, fill: '#dff1f7', stroke: '#5b6772' },
+  rotor: { d: 'M42 18 L42 8 Q49 11 47 16 Z M42 18 L52 18 Q49 25 44 23 Z M42 18 L42 28 Q35 25 37 20 Z M42 18 L32 18 Q35 11 40 13 Z', fill: '#0e7490' },
+  val: { x: 42, y: 'calc(h+15)', textAnchor: 'middle', fill: '#0e7490', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
+} }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><path @selector="rotor"/><text @selector="val"/>` })
 
 // New: pressure tap — small inline connector on a pipe; a pressure gauge attaches here.
 export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 22, height: 22 }, attrs: {

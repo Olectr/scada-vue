@@ -73,28 +73,29 @@ function gauge(elm, graph) {
 
 // flow meter: walk the flow-pipe network from the meter; a running pump reachable
 // without crossing a closed valve gives flow (m³/h ≈ pressure × 120). Respects control gating.
-function flowMeter(elm, graph, ctrlPct) {
-  const seen = new Set([elm.id]); const q = [elm.id]; let mph = 0, steps = 0
-  while (q.length && steps < 60) {
-    steps++
-    const id = q.shift(); const node = graph.getCell(id); if (!node) continue
-    const t = node.get('type')
-    if (id !== elm.id) {
-      if (t === 's.Pump') {
-        const gated = ctrlPct && ctrlPct[id] != null && ctrlPct[id] <= 0
-        if (node.get('on') && !gated) mph = Math.max(mph, Math.round((node.get('pressure') || 0) * 120))
-        continue // don't traverse past a pump
+function flowMeter(elm, graph, nodeFlow) {
+  let mph = 0
+  if (nodeFlow[elm.id]) {
+    // water reaches the meter — read the driving pump's pressure (BFS through open valves)
+    const seen = new Set([elm.id]); const q = [elm.id]; let steps = 0
+    while (q.length && steps < 60) {
+      steps++
+      const id = q.shift(); const node = graph.getCell(id); if (!node) continue
+      const t = node.get('type')
+      if (id !== elm.id) {
+        if (t === 's.Pump') { if (node.get('on')) mph = Math.max(mph, Math.round((node.get('pressure') || 0) * 120)); continue }
+        if (t === 's.Valve' && !node.get('open')) continue
       }
-      if (t === 's.Valve' && !node.get('open')) continue // closed valve blocks the path
-    }
-    for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
-      const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
-      const other = s === id ? tg : s
-      if (other && !seen.has(other)) { seen.add(other); q.push(other) }
+      for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
+        const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
+        const other = s === id ? tg : s
+        if (other && !seen.has(other)) { seen.add(other); q.push(other) }
+      }
     }
   }
   elm.set('flow', mph, { silent: true })
-  elm.attr('val/text', String(mph))
+  elm.attr('val/text', mph + ' m³/h')
+  elm.attr('rotor/class', mph > 0 ? 'wp-spin' : '')
 }
 
 function quality(elm) {
@@ -102,38 +103,6 @@ function quality(elm) {
   const tb = drift(elm.get('turb') ?? 0.8, 0.2, 1.6, 0.08); elm.set('turb', tb, { silent: true }); elm.attr('tbV/text', tb.toFixed(2) + ' NTU')
   const cl = drift(elm.get('cl') ?? 1.2, 0.6, 1.8, 0.06); elm.set('cl', cl, { silent: true }); elm.attr('clV/text', cl.toFixed(2) + ' mg/L')
   const dox = drift(elm.get('do') ?? 8.4, 6.5, 9.5, 0.15); elm.set('do', dox, { silent: true }); elm.attr('doV/text', dox.toFixed(1) + ' mg/L')
-}
-
-// ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
-// A pipe whose source is a control-driven pump/valve runs at that control's speed.
-function flowPipe(link, graph, ctrlPct) {
-  if (link.get('type') === 's.Leader') return // instrument leaders don't carry flow
-  const srcId = link.source() && link.source().id
-  const src = srcId ? graph.getCell(srcId) : null
-  let live = false, pct = 100
-  if (src) {
-    const t = src.get('type')
-    if (t === 's.Pump') live = !!src.get('on')
-    else if (t === 's.Valve') live = !!src.get('open')
-    else if (t === 's.Control') { pct = clamp(src.get('pct') ?? 100, 0, 100); live = pct > 0 }
-    else if (t === 's.Cyl' || t === 's.Hopper') {
-      // a tank outlet flows only when level is past its mark: top → above HIGH, bottom → above LOW
-      const lvl = src.get('level') ?? 0
-      const hi = src.get('simMax') ?? 70, lo = src.get('simMin') ?? 20
-      const port = link.source() && link.source().port
-      if (port === 'top') live = lvl > hi
-      else if (port === 'bot' || port === 'in') live = lvl > lo
-      else live = lvl > lo // body-snapped (no port): gate on LOW mark, not unconditional
-    }
-    else live = true // zone or anything else = always a source
-    // a Control linked to this source sets the flow speed (0% also stops it)
-    if (t !== 's.Control' && ctrlPct[srcId] != null) {
-      pct = ctrlPct[srcId]
-      if (pct <= 0) live = false
-    }
-  }
-  const dur = (0.35 + (1 - pct / 100) * 1.9).toFixed(2)
-  link.attr('line', { opacity: live ? 1 : 0, class: live ? 'wp-flow wp-on' : 'wp-flow', style: { animationDuration: dur + 's' } })
 }
 
 // Build id -> driving-control-% map from every Control's `targets` list.
@@ -147,16 +116,64 @@ function controlMap(graph) {
   return m
 }
 
-// Re-animate every pipe from current element state WITHOUT drifting values.
-// Used for instant feedback in edit mode (and on slider drag) so a 60Hz input
-// event never advances the tank/gauge simulation.
+// Propagate flow downstream from sources (tanks above their mark, zones, un-fed pumps).
+// A pump/valve only PASSES flow if water actually reaches it — so a dry tank kills the
+// whole downstream path. Returns per-pipe live + per-element "has water" map.
+function propagateFlow(graph, ctrlPct) {
+  const links = graph.getLinks().filter(l => l.get('type') === 's.FlowPipe')
+  const inbound = {}
+  links.forEach(l => { const t = l.target() && l.target().id; if (t) inbound[t] = (inbound[t] || 0) + 1 })
+  const nodeFlow = {}
+  const linkLive = new Map()
+  const gated = id => ctrlPct[id] != null && ctrlPct[id] <= 0 // control closed this component
+  function emits(node, port) {
+    const t = node.get('type')
+    if (t === 's.Cyl' || t === 's.Hopper') {
+      const lvl = node.get('level') ?? 0, hi = node.get('simMax') ?? 70, lo = node.get('simMin') ?? 20
+      return port === 'top' ? lvl > hi : lvl > lo
+    }
+    if (t === 's.Zone') return true // supply source
+    if (t === 's.Pump') return node.get('on') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
+    if (t === 's.Valve') return node.get('open') && (nodeFlow[node.id] || !inbound[node.id])
+    return !!nodeFlow[node.id] // tap / flow meter / pass-through: only if fed
+  }
+  let changed = true, guard = 0
+  while (changed && guard < 200) {
+    changed = false; guard++
+    for (const l of links) {
+      const s = l.source(), tg = l.target(); const sId = s && s.id, tId = tg && tg.id
+      if (!sId || !tId) continue
+      const sNode = graph.getCell(sId); if (!sNode) continue
+      const live = emits(sNode, s.port)
+      linkLive.set(l.id, live)
+      if (live && !nodeFlow[tId]) { nodeFlow[tId] = true; changed = true }
+    }
+  }
+  return { linkLive, nodeFlow }
+}
+
+function animateLinks(graph, ctrlPct, linkLive) {
+  graph.getLinks().forEach(l => {
+    if (l.get('type') === 's.Leader') return // instrument leaders don't carry flow
+    const live = !!linkLive.get(l.id)
+    const srcId = l.source() && l.source().id
+    const pct = srcId && ctrlPct[srcId] != null ? ctrlPct[srcId] : 100
+    const dur = (0.35 + (1 - pct / 100) * 1.9).toFixed(2)
+    l.attr('line', { opacity: live ? 1 : 0, class: live ? 'wp-flow wp-on' : 'wp-flow', style: { animationDuration: dur + 's' } })
+  })
+}
+
+// Re-animate every pipe from current element state WITHOUT drifting values
+// (instant feedback in edit mode / on slider drag).
 export function refreshLinks(graph) {
   const ctrlPct = controlMap(graph)
-  graph.getLinks().forEach(link => flowPipe(link, graph, ctrlPct))
+  const { linkLive } = propagateFlow(graph, ctrlPct)
+  animateLinks(graph, ctrlPct, linkLive)
 }
 
 export function simulateTick(graph) {
   const ctrlPct = controlMap(graph)
+  const { linkLive, nodeFlow } = propagateFlow(graph, ctrlPct)
   graph.getElements().forEach(elm => {
     switch (elm.get('type')) {
       case 's.Cyl': tank(elm, false); break
@@ -164,9 +181,9 @@ export function simulateTick(graph) {
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm, graph); break
-      case 's.Flow': flowMeter(elm, graph, ctrlPct); break
+      case 's.Flow': flowMeter(elm, graph, nodeFlow); break
       case 's.Quality': quality(elm); break
     }
   })
-  graph.getLinks().forEach(link => flowPipe(link, graph, ctrlPct))
+  animateLinks(graph, ctrlPct, linkLive)
 }

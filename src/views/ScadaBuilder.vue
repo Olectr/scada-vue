@@ -114,7 +114,7 @@ function makeEl(type) {
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
     case 'tap': return new Tap({ position: { x, y }, ports: portsCfg([{ id: 'p', x: 11, y: 11 }], true) })
-    case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 23 }, { id: 'r', x: 86, y: 23 }], true) })
+    case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
   }
