@@ -44,6 +44,7 @@ function pump(elm, fed) {
   elm.attr('imp/class', running ? 'wp-spin' : '')
   elm.attr('inner/fill', running ? '#5fb98f' : '#8b949e')
   elm.set('pressure', running ? drift(elm.get('pressure') || 2, 1.4, 3.4, 0.18) : 0, { silent: true })
+  if (running) elm.set('runtime', (elm.get('runtime') || 0) + 1, { silent: true }) // seconds run-hours
 }
 
 function valve(elm) {
@@ -101,6 +102,7 @@ function flowMeter(elm, graph, nodeFlow, ctrlPct) {
   // flow shown only when water actually reaches the meter; magnitude from the driving pump
   const mph = nodeFlow[elm.id] ? Math.round(connectedPumpPressure(elm, graph, ctrlPct) * 120) : 0
   elm.set('flow', mph, { silent: true })
+  elm.set('total', (elm.get('total') || 0) + mph / 3600, { silent: true }) // accumulate m³
   elm.attr('val/text', mph + ' m³/h')
   elm.attr('rotor/class', mph > 0 ? 'wp-spin' : '')
 }

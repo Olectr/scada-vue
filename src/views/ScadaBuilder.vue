@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
@@ -45,6 +45,32 @@ function newLayout() {
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
   resetHistory()
+}
+
+// starter templates — build a ready-made screen the user can tweak
+function loadTemplate(kind) {
+  if (!kind || !graph) return
+  if (graph.getElements().length && !confirm('Replace the canvas with this template?')) return
+  graph.clear(); for (const k in counters) delete counters[k]
+  const mk = type => { const e = makeEl(type); graph.addCell(e); return e }
+  const link = (s, sp, t, tp) => graph.addCell(new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } }))
+  if (kind === 'water') {
+    const tank = mk('tank'); tank.position(120, 120)
+    const v = mk('valve'); v.position(370, 150)
+    const p = mk('pump'); p.position(520, 140)
+    const flow = mk('flow'); flow.position(680, 150)
+    const hop = mk('hopper'); hop.position(900, 110)
+    const zone = mk('zone'); zone.position(900, 380)
+    const ctrl = mk('control'); ctrl.position(360, 300); ctrl.set('targets', [p.id, v.id])
+    const chart = mk('chart'); chart.position(120, 430)
+    link(tank, 'bot', v, 'l'); link(v, 'r', p, 'l'); link(p, 'r', flow, 'l'); link(flow, 'r', hop, 'in'); link(hop, 'bot', zone, 'p')
+  } else if (kind === 'dual') {
+    const t1 = mk('tank'); t1.position(120, 90)
+    const p1 = mk('pump'); p1.position(420, 110); const z1 = mk('zone'); z1.position(700, 120)
+    const p2 = mk('pump'); p2.position(420, 320); const z2 = mk('zone'); z2.position(700, 330)
+    link(t1, 'top', p1, 'l'); link(p1, 'r', z1, 'p'); link(t1, 'bot', p2, 'l'); link(p2, 'r', z2, 'p')
+  }
+  currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
 }
 
 // upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
@@ -112,6 +138,7 @@ const palette = [
   { type: 'zone', label: 'Zone', ico: '⚑' },
   { type: 'quality', label: 'Water Quality', ico: '🧪' },
   { type: 'chart', label: 'Chart', ico: '📈' },
+  { type: 'note', label: 'Label', ico: '📝' },
 ]
 
 const counters = reactive({})
@@ -131,6 +158,7 @@ function makeEl(type) {
     case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
+    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: 'Label text' } } })
   }
 }
 function addComponent(type) {
@@ -148,7 +176,7 @@ const sel = reactive({
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [], angle: 0,
 })
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -167,7 +195,10 @@ function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/tex
 function updateSelInfo() {
   const m = selModel()
   if (!m) { sel.info = null; sel.connections = []; return }
-  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m) }
+  let extra = null
+  if (m.get('type') === 's.Flow') extra = 'Total ' + Math.round(m.get('total') || 0) + ' m³'
+  else if (m.get('type') === 's.Pump') { const s = m.get('runtime') || 0; extra = 'Run ' + Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm' }
+  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), value: elemValue(m), extra }
   if (m.get('type') === 's.Control') {
     sel.connections = (m.get('targets') || []).map(id => {
       const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
@@ -547,6 +578,11 @@ onUnmounted(() => {
       <button @click="exportJson">⬇ JSON</button>
       <button @click="pickImport">⬆ JSON</button>
       <button @click="exportPng">🖼 PNG</button>
+      <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''">
+        <option value="">Template…</option>
+        <option value="water">Water Treatment</option>
+        <option value="dual">Dual Pump</option>
+      </select>
       <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
       <span class="sp"></span>
       <button :class="{ on: dark }" title="Dark mode" @click="dark = !dark">🌙</button>
@@ -599,6 +635,7 @@ onUnmounted(() => {
           <div v-if="sel.info" class="info">
             <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
             <div class="irow"><span>Value</span><b class="ival">{{ sel.info.value }}</b></div>
+            <div v-if="sel.info.extra" class="irow"><span>Total</span><b>{{ sel.info.extra }}</b></div>
             <div class="irow"><span>ID</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
           </div>
           <label v-if="sel.hasName">Name

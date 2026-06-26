@@ -95,6 +95,12 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
+// New: annotation label (sticky note) — free text on the canvas.
+export const Note = joint.dia.Element.define('s.Note', { size: { width: 150, height: 32 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 5, fill: '#fef9c3', stroke: '#fde047', strokeWidth: 1 },
+  name: { x: 10, y: 'calc(h/2)', textVerticalAnchor: 'middle', fill: '#713f12', fontSize: 13, fontWeight: 'bold', text: 'Note' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
+
 // New: flow meter — inline turbine meter (flanged pipe + dial) with live m³/h below.
 export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84, height: 48 }, attrs: {
   flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
@@ -176,6 +182,7 @@ Object.assign(joint.shapes.s, {
   Quality,
   Tap,
   Flow: FlowMeter,
+  Note,
   FlowPipe,
   Leader,
 })
