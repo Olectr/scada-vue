@@ -31,7 +31,7 @@ function loadLayout(name) {
   graph.fromJSON(idx[name])
   migrateCells()
   reseedCounters() // keep auto-naming from colliding with loaded names
-  currentName.value = name; selectEl(null); syncOverlays()
+  currentName.value = name; selectEl(null); syncOverlays(); resetHistory()
 }
 function deleteLayout() {
   if (!currentName.value) return
@@ -44,6 +44,7 @@ function newLayout() {
   if (!confirm('Clear the canvas and start a new layout?')) return
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
+  resetHistory()
 }
 
 // upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
@@ -93,7 +94,7 @@ function importJson(e) {
       migrateCells()
       reseedCounters()
       currentName.value = ''
-      selectEl(null); syncOverlays()
+      selectEl(null); syncOverlays(); resetHistory()
     } catch { alert('This JSON is not a SCADA layout (could not rebuild the screen).') }
   }
   r.readAsText(f)
@@ -367,6 +368,74 @@ function syncCharts() {
 // rebuild both overlay sets on any structural/position change
 function syncOverlays() { syncControls(); syncCharts() }
 
+// --- undo / redo (structural snapshots; ignores live-sim attr churn) ---
+const past = [], future = []
+let lastJSON = '', restoring = false, histTimer = null
+const canUndo = ref(false), canRedo = ref(false)
+function snapKey() { return JSON.stringify(graph.toJSON()) }
+function syncHistFlags() { canUndo.value = past.length > 0; canRedo.value = future.length > 0 }
+function resetHistory() { clearTimeout(histTimer); histTimer = null; past.length = 0; future.length = 0; lastJSON = graph ? snapKey() : ''; syncHistFlags() }
+function scheduleSnap() {
+  if (restoring || mode.value !== 'edit') return
+  clearTimeout(histTimer)
+  histTimer = setTimeout(() => { past.push(lastJSON); if (past.length > 60) past.shift(); future.length = 0; lastJSON = snapKey(); syncHistFlags() }, 250)
+}
+function restore(json) { restoring = true; graph.fromJSON(JSON.parse(json)); migrateCells(); lastJSON = json; restoring = false; selectEl(null); syncOverlays(); syncHistFlags() }
+function undo() { if (!past.length) return; future.push(snapKey()); restore(past.pop()) }
+function redo() { if (!future.length) return; past.push(snapKey()); restore(future.pop()) }
+function duplicateSel() { const m = selModel(); if (!m || !m.clone) return; const c = m.clone(); c.translate(36, 30); graph.addCell(c); selectEl(c) }
+
+// --- alarms / setpoints ---
+const alarms = ref([])      // banner list {id,name,msg}
+const alarmsUi = ref([])    // canvas badges {id,x,y}
+function computeAlarms() {
+  if (!graph || mode.value !== 'run') { alarms.value = []; alarmsUi.value = []; return }
+  const list = [], ui = []
+  graph.getElements().forEach(e => {
+    const t = e.get('type'); let msg = null
+    if (t === 's.Cyl' || t === 's.Hopper') {
+      const lvl = Math.round(e.get('level') ?? 0), lo = e.get('simMin') ?? 20
+      if (lvl <= lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
+    } else if (t === 's.PG') {
+      const v = e.get('value') ?? 0, hi = e.get('simMax') ?? 8
+      if (v >= hi * 0.95) msg = `HIGH PRESSURE ${v.toFixed(1)}`
+    }
+    if (msg) { const p = e.position(); list.push({ id: e.id, name: nameOf(e), msg }); ui.push({ id: e.id, x: p.x, y: p.y }) }
+  })
+  alarms.value = list; alarmsUi.value = ui
+}
+
+// --- dark theme ---
+const dark = ref(false)
+watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0f172a' : '#ffffff' }) })
+
+// --- export the diagram as a PNG image ---
+function exportPng() {
+  const svg = host.value && host.value.querySelector('svg'); if (!svg) return
+  const w = Math.round(svg.width.baseVal.value || svg.clientWidth), h = Math.round(svg.height.baseVal.value || svg.clientHeight)
+  const xml = new XMLSerializer().serializeToString(svg)
+  const img = new Image()
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h
+    const ctx = c.getContext('2d'); ctx.fillStyle = dark.value ? '#0f172a' : '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0)
+    const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = (currentName.value || 'scada') + '.png'
+    document.body.appendChild(a); a.click(); a.remove()
+  }
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)
+}
+
+// keyboard: undo/redo, duplicate, delete (ignored while typing in a field)
+function onKey(e) {
+  const tag = (e.target && e.target.tagName) || ''
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  const mod = e.metaKey || e.ctrlKey
+  const k = e.key.toLowerCase()
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+  else if (mod && k === 'y') { e.preventDefault(); redo() }
+  else if (mod && k === 'd') { e.preventDefault(); duplicateSel() }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.id && mode.value === 'edit') { e.preventDefault(); deleteSel() }
+}
+
 function fit() {
   if (!fitEl.value || !paper) return
   const cw = fitEl.value.clientWidth
@@ -423,18 +492,23 @@ onMounted(() => {
   graph.on('change:position', followControls)
   // keep on-canvas overlays (controls + charts) positioned + in sync
   graph.on('add remove change:position', syncOverlays)
+  // snapshot structural edits for undo/redo
+  graph.on('add remove change:position change:source change:target change:angle', scheduleSnap)
   syncOverlays()
+  resetHistory()
 
   fit()
   onResize = fit
   fitRO = new ResizeObserver(fit); fitRO.observe(fitEl.value)
   window.addEventListener('resize', onResize)
+  window.addEventListener('keydown', onKey)
   refreshNames()
 })
 
-function startSim() { stopSim(); simulateTick(graph); tankTick(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); if (sel.id) updateSelInfo() }, 1000) }
+function startSim() { stopSim(); simulateTick(graph); tankTick(); computeAlarms(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); computeAlarms(); if (sel.id) updateSelInfo() }, 1000) }
 function stopSim() {
   if (simTimer) clearInterval(simTimer); simTimer = null
+  alarms.value = []; alarmsUi.value = []
   // zero live meter readouts + model values when the sim is paused
   if (graph) graph.getElements().forEach(e => {
     const t = e.get('type')
@@ -450,13 +524,15 @@ onUnmounted(() => {
   if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
+  window.removeEventListener('keydown', onKey)
+  clearTimeout(histTimer)
   if (paper) paper.remove()
   graph = paper = null
 })
 </script>
 
 <template>
-  <div class="builder">
+  <div class="builder" :class="{ dark }">
     <div class="toolbar">
       <strong>SCADA Builder</strong>
       <button @click="newLayout">＋ New</button>
@@ -466,12 +542,21 @@ onUnmounted(() => {
         <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
       </select>
       <button :disabled="!currentName" @click="deleteLayout">🗑 Delete</button>
-      <button @click="exportJson">⬇ Export JSON</button>
-      <button @click="pickImport">⬆ Import JSON</button>
+      <button :disabled="!canUndo" title="Undo (⌘/Ctrl+Z)" @click="undo">↶</button>
+      <button :disabled="!canRedo" title="Redo (⌘/Ctrl+Shift+Z)" @click="redo">↷</button>
+      <button :disabled="!sel.id || mode === 'run'" title="Duplicate (⌘/Ctrl+D)" @click="duplicateSel">⧉</button>
+      <button @click="exportJson">⬇ JSON</button>
+      <button @click="pickImport">⬆ JSON</button>
+      <button @click="exportPng">🖼 PNG</button>
       <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
       <span class="sp"></span>
+      <button :class="{ on: dark }" title="Dark mode" @click="dark = !dark">🌙</button>
       <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
       <button :class="{ on: mode === 'run' }" @click="mode = 'run'">▶ Run</button>
+    </div>
+    <div v-if="alarms.length" class="alarmbar">
+      <span class="abadge">⚠ {{ alarms.length }}</span>
+      <span v-for="a in alarms" :key="a.id" class="aitem">{{ a.name }}: {{ a.msg }}</span>
     </div>
     <div class="cols">
       <aside class="palette">
@@ -505,6 +590,8 @@ onUnmounted(() => {
           </div>
           <div class="chbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
         </div>
+        <!-- alarm badges pulse on components that breach a setpoint -->
+        <div v-for="a in alarmsUi" :key="a.id" class="alarmbadge" :style="{ left: (a.x * scale - 6) + 'px', top: (a.y * scale - 18) + 'px' }">⚠</div>
       </div>
       <aside class="inspector">
         <div class="ptitle">Inspector</div>
@@ -664,6 +751,22 @@ onUnmounted(() => {
 .cdir { font-size: 10px; font-weight: 700; color: #16a34a; white-space: nowrap; }
 .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cval { font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
+/* alarms */
+.alarmbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 12px; font-weight: 600; }
+.abadge { background: #dc2626; color: #fff; border-radius: 12px; padding: 1px 9px; }
+.aitem { background: #fff; border: 1px solid #fecaca; border-radius: 4px; padding: 1px 7px; }
+.alarmbadge { position: absolute; z-index: 6; color: #dc2626; font-size: 16px; pointer-events: none; animation: alarmpulse 1s ease-in-out infinite; }
+@keyframes alarmpulse { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: .35; transform: scale(1.3) } }
+/* dark theme */
+.builder.dark { background: #0f172a; }
+.builder.dark .toolbar, .builder.dark .palette, .builder.dark .inspector { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+.builder.dark .toolbar { color: #e2e8f0; }
+.builder.dark .toolbar button, .builder.dark .palette button, .builder.dark .loadsel { background: #0f172a; color: #cbd5e1; border-color: #334155; }
+.builder.dark .toolbar button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+.builder.dark .ptitle, .builder.dark .fields label, .builder.dark .irow b { color: #e2e8f0; }
+.builder.dark .fit { border-color: #334155; background: #0f172a; }
+.builder.dark .info { background: #0f172a; border-color: #334155; }
+.builder.dark .hint, .builder.dark .empty { color: #94a3b8; }
 </style>
 
 <style>
