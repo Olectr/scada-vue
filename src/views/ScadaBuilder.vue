@@ -29,6 +29,7 @@ function loadLayout(name) {
   const idx = loadIndex(); if (!idx[name]) return
   mode.value = 'edit'
   graph.fromJSON(idx[name])
+  migrateCells()
   reseedCounters() // keep auto-naming from colliding with loaded names
   currentName.value = name; selectEl(null); syncOverlays()
 }
@@ -43,6 +44,17 @@ function newLayout() {
   if (!confirm('Clear the canvas and start a new layout?')) return
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
+}
+
+// upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
+function migrateCells() {
+  if (!graph) return
+  graph.getElements().forEach(e => {
+    if (e.get('type') === 's.Tap' && (e.size().width || 0) < 80) {
+      e.resize(84, 48)
+      e.set('ports', portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }, { id: 'p', x: 42, y: 24 }], true))
+    }
+  })
 }
 
 // reseed auto-name counters from element names so new parts don't collide after a load/import
@@ -78,6 +90,7 @@ function importJson(e) {
     try {
       mode.value = 'edit'
       graph.fromJSON(g)
+      migrateCells()
       reseedCounters()
       currentName.value = ''
       selectEl(null); syncOverlays()
@@ -419,11 +432,11 @@ onMounted(() => {
 function startSim() { stopSim(); simulateTick(graph); tankTick(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); if (sel.id) updateSelInfo() }, 1000) }
 function stopSim() {
   if (simTimer) clearInterval(simTimer); simTimer = null
-  // zero live meter readouts when the sim is paused
+  // zero live meter readouts + model values when the sim is paused
   if (graph) graph.getElements().forEach(e => {
     const t = e.get('type')
-    if (t === 's.Flow') { e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') }
-    else if (t === 's.Tap') { e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
+    if (t === 's.Flow') { e.set('flow', 0); e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') }
+    else if (t === 's.Tap') { e.set('pressure', 0); e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
   })
 }
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })

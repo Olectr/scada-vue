@@ -43,26 +43,22 @@ function valve(elm) {
   setValveVisual(elm)
 }
 
-// follow a gauge's dashed leader → tap → flow-connected pump and read its live pressure
-function gaugePressure(gaugeElm, graph) {
+// follow a gauge's dashed leader → tap, then read the tap's network pump pressure
+function gaugePressure(gaugeElm, graph, nodeFlow, ctrlPct) {
   const leaders = graph.getConnectedLinks(gaugeElm).filter(l => l.get('type') === 's.Leader')
   for (const l of leaders) {
     const a = l.source() && l.source().id, b = l.target() && l.target().id
     const tapId = a === gaugeElm.id ? b : a
     const tap = tapId && graph.getCell(tapId)
     if (!tap || tap.get('type') !== 's.Tap') continue
-    for (const fl of graph.getConnectedLinks(tap).filter(x => x.get('type') === 's.FlowPipe')) {
-      const s = fl.source() && fl.source().id, t = fl.target() && fl.target().id
-      const o = graph.getCell(s === tap.id ? t : s)
-      if (o && o.get('type') === 's.Pump') return o.get('pressure') || 0
-    }
+    return nodeFlow[tap.id] ? connectedPumpPressure(tap, graph, ctrlPct) : 0
   }
   return null
 }
 
-function gauge(elm, graph) {
+function gauge(elm, graph, nodeFlow, ctrlPct) {
   const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
-  let v = gaugePressure(elm, graph) // actual pump pressure via the tap; null if not connected
+  let v = gaugePressure(elm, graph, nodeFlow, ctrlPct) // pump pressure via the tap; null if not connected
   if (v == null) v = 0
   v = Math.max(lo, Math.min(hi, v))
   elm.set('value', v, { silent: true })
@@ -73,15 +69,16 @@ function gauge(elm, graph) {
 
 // flow meter: walk the flow-pipe network from the meter; a running pump reachable
 // without crossing a closed valve gives flow (m³/h ≈ pressure × 120). Respects control gating.
-// max pressure of an ON pump reachable through the connected pipe network (open valves only)
-function connectedPumpPressure(elm, graph) {
+// max pressure of an ON, non-control-closed pump reachable through the pipe network (open valves only)
+function connectedPumpPressure(elm, graph, ctrlPct) {
+  const gated = id => ctrlPct && ctrlPct[id] != null && ctrlPct[id] <= 0
   const seen = new Set([elm.id]); const q = [elm.id]; let p = 0, steps = 0
   while (q.length && steps < 80) {
     steps++
     const id = q.shift(); const node = graph.getCell(id); if (!node) continue
     const t = node.get('type')
     if (id !== elm.id) {
-      if (t === 's.Pump') { if (node.get('on')) p = Math.max(p, node.get('pressure') || 0); continue }
+      if (t === 's.Pump') { if (node.get('on') && !gated(id)) p = Math.max(p, node.get('pressure') || 0); continue }
       if (t === 's.Valve' && !node.get('open')) continue
     }
     for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
@@ -93,17 +90,17 @@ function connectedPumpPressure(elm, graph) {
   return p
 }
 
-function flowMeter(elm, graph, nodeFlow) {
+function flowMeter(elm, graph, nodeFlow, ctrlPct) {
   // flow shown only when water actually reaches the meter; magnitude from the driving pump
-  const mph = nodeFlow[elm.id] ? Math.round(connectedPumpPressure(elm, graph) * 120) : 0
+  const mph = nodeFlow[elm.id] ? Math.round(connectedPumpPressure(elm, graph, ctrlPct) * 120) : 0
   elm.set('flow', mph, { silent: true })
   elm.attr('val/text', mph + ' m³/h')
   elm.attr('rotor/class', mph > 0 ? 'wp-spin' : '')
 }
 
-// pressure tap: shows the live pressure of the connected running pump (bar)
-function tap(elm, graph) {
-  const bar = connectedPumpPressure(elm, graph)
+// pressure tap: shows live pressure of the connected running pump (bar), only when water reaches it
+function tap(elm, graph, nodeFlow, ctrlPct) {
+  const bar = nodeFlow[elm.id] ? connectedPumpPressure(elm, graph, ctrlPct) : 0
   elm.set('pressure', bar, { silent: true })
   elm.attr('pVal/text', bar.toFixed(1))
   elm.attr('val/text', bar.toFixed(1) + ' bar')
@@ -191,9 +188,9 @@ export function simulateTick(graph) {
       case 's.Hopper': tank(elm, true); break
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
-      case 's.PG': gauge(elm, graph); break
-      case 's.Flow': flowMeter(elm, graph, nodeFlow); break
-      case 's.Tap': tap(elm, graph); break
+      case 's.PG': gauge(elm, graph, nodeFlow, ctrlPct); break
+      case 's.Flow': flowMeter(elm, graph, nodeFlow, ctrlPct); break
+      case 's.Tap': tap(elm, graph, nodeFlow, ctrlPct); break
       case 's.Quality': quality(elm); break
     }
   })
