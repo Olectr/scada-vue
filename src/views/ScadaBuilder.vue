@@ -111,7 +111,7 @@ function makeEl(type) {
     case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
-    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
+    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
   }
 }
@@ -142,7 +142,7 @@ function elemValue(e) {
     default: return '—'
   }
 }
-function nameOf(e) { return (e.attr && e.attr('name/text')) || TYPE_LABEL[e.get('type')] || e.get('type') }
+function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/text'))) || TYPE_LABEL[e.get('type')] || e.get('type') }
 // id / name / value of the selected element + everything connected to it
 function updateSelInfo() {
   const m = selModel()
@@ -166,7 +166,7 @@ function selectEl(model) {
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
-  sel.hasName = t !== 's.PG'
+  sel.hasName = t !== 's.PG' && t !== 's.Quality'
   sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
   sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
@@ -220,7 +220,7 @@ function followControls(cell, position, opt) {
     }
   })
 }
-function deleteSel() { const m = selModel(); if (m) { m.remove(); selectEl(null) } }
+function deleteSel() { if (mode.value !== 'edit') return; const m = selModel(); if (m) { m.remove(); selectEl(null) } }
 
 // reflect a pump/valve's on/open state on the canvas immediately (without a full sim drift)
 function applyTargetVisual(t) {
@@ -340,6 +340,7 @@ function syncCharts() {
   chartsUi.value = graph.getElements()
     .filter(e => e.get('type') === 's.Chart')
     .map(e => { const p = e.position(), s = e.size(); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
+  if (fsChart.value && !chartsUi.value.find(c => c.id === fsChart.value)) fsChart.value = null // close orphaned fullscreen
 }
 // rebuild both overlay sets on any structural/position change
 function syncOverlays() { syncControls(); syncCharts() }
@@ -523,7 +524,7 @@ onUnmounted(() => {
               <code class="iid" :title="cn.id">{{ cn.id }}</code>
             </div>
           </div>
-          <button class="del" @click="deleteSel">🗑 Delete</button>
+          <button v-if="mode === 'edit'" class="del" @click="deleteSel">🗑 Delete</button>
         </div>
       </aside>
     </div>
@@ -563,7 +564,8 @@ onUnmounted(() => {
 .cov.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
 .cov input, .cov button, .cov .covhdr { pointer-events: auto; }
 .cov .covhdr { font-size: 12px; font-weight: 700; color: #334155; cursor: move; user-select: none; padding: 5px 0 4px; border-bottom: 1px solid #eef2f6; margin-bottom: 4px; }
-.chartov { position: absolute; box-sizing: border-box; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: flex; flex-direction: column; overflow: hidden; z-index: 4; }
+.chartov { position: absolute; box-sizing: border-box; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: flex; flex-direction: column; overflow: hidden; z-index: 4; pointer-events: none; }
+.chartov .chdr, .chartov .chbody { pointer-events: auto; } /* header drags, body hovers for chart.js tooltips */
 .chartov.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
 .chdr { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-bottom: 1px solid #eef2f6; cursor: move; user-select: none; }
 .chname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; color: #334155; }
