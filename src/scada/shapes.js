@@ -91,6 +91,20 @@ export const Control = joint.dia.Element.define('s.Control', { size: { width: 13
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: 'transparent', stroke: 'none' },
 } }, { markup: svg`<rect @selector="box"/>` })
 
+// New: water-quality analyzer — live pH / Turbidity / Cl / DO readout.
+export const Quality = joint.dia.Element.define('s.Quality', { size: { width: 156, height: 118 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#fff', stroke: '#cbd5e1', strokeWidth: 1 },
+  title: { x: 'calc(w/2)', y: 18, textAnchor: 'middle', fill: '#334155', fontSize: 12, fontWeight: 'bold', text: 'Water Quality' },
+  phL: { x: 12, y: 42, fill: '#64748b', fontSize: 11, text: 'pH' },
+  phV: { x: 'calc(w-12)', y: 42, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  tbL: { x: 12, y: 62, fill: '#64748b', fontSize: 11, text: 'Turbidity' },
+  tbV: { x: 'calc(w-12)', y: 62, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  clL: { x: 12, y: 82, fill: '#64748b', fontSize: 11, text: 'Cl' },
+  clV: { x: 'calc(w-12)', y: 82, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  doL: { x: 12, y: 102, fill: '#64748b', fontSize: 11, text: 'DO' },
+  doV: { x: 'calc(w-12)', y: 102, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="title"/><text @selector="phL"/><text @selector="phV"/><text @selector="tbL"/><text @selector="tbV"/><text @selector="clL"/><text @selector="clV"/><text @selector="doL"/><text @selector="doV"/>` })
+
 // New: chart frame element (builder). A live trend chart (HTML overlay) is drawn on top.
 export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, height: 180 }, attrs: {
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1 },
@@ -133,6 +147,7 @@ Object.assign(joint.shapes.s, {
   PG: PGauge,
   Control,
   Chart,
+  Quality,
   FlowPipe,
   Leader,
 })

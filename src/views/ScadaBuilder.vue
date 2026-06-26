@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 
@@ -94,6 +94,7 @@ const palette = [
   { type: 'gauge', label: 'Pressure Gauge', ico: 'Ⓟ' },
   { type: 'control', label: 'Control', ico: '🎚' },
   { type: 'zone', label: 'Zone', ico: '⚑' },
+  { type: 'quality', label: 'Water Quality', ico: '🧪' },
   { type: 'chart', label: 'Chart', ico: '📈' },
 ]
 
@@ -110,6 +111,7 @@ function makeEl(type) {
     case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
+    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
   }
 }
@@ -128,7 +130,7 @@ const sel = reactive({
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [],
 })
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -136,6 +138,7 @@ function elemValue(e) {
     case 's.Valve': return e.get('open') ? 'OPEN' : 'CLOSED'
     case 's.PG': return Number(e.get('value') ?? 0).toFixed(1) + ' bar'
     case 's.Control': return (e.get('pct') ?? 0) + '% open'
+    case 's.Quality': return 'pH ' + Number(e.get('ph') ?? 7.2).toFixed(2)
     default: return '—'
   }
 }
@@ -303,6 +306,7 @@ function driveFor(id, open) {
 
 // --- on-canvas live charts: plot every tank/hopper's current capacity (%) over time ---
 const chartsUi = ref([])
+const fsChart = ref(null) // id of chart shown fullscreen (null = none)
 const tankHist = reactive({}) // tankId -> level history (number[])
 const tankRev = ref(0) // bumped on any tank-history change so tankSeries() recomputes reactively
 const TANK_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
@@ -448,10 +452,14 @@ onUnmounted(() => {
             <button v-if="c.showClose" class="close" @click="setOpenClose(c.id, false)">close</button>
           </div>
         </div>
-        <!-- on-canvas live charts -->
-        <div v-for="c in chartsUi" :key="c.id" class="chartov"
+        <!-- on-canvas live charts: header drags/selects + fullscreen; body shows chart.js tooltips -->
+        <div v-for="c in chartsUi" :key="c.id" class="chartov" :class="{ sel: sel.id === c.id }"
              :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px', width: (c.w * scale) + 'px', height: (c.h * scale) + 'px' }">
-          <TrendChart :series="tankSeries()" style="width:100%;height:100%" />
+          <div class="chdr" :title="c.id" @pointerdown="ctrlDragStart($event, c)">
+            <span class="chname">{{ c.name }}</span>
+            <button class="fsbtn" title="Fullscreen" @pointerdown.stop @click="fsChart = c.id">⛶</button>
+          </div>
+          <div class="chbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
         </div>
       </div>
       <aside class="inspector">
@@ -519,6 +527,17 @@ onUnmounted(() => {
         </div>
       </aside>
     </div>
+
+    <!-- fullscreen chart -->
+    <div v-if="fsChart" class="fsmodal" @click.self="fsChart = null">
+      <div class="fsinner">
+        <div class="fshead">
+          <b>{{ (chartsUi.find(c => c.id === fsChart) || {}).name || 'Chart' }} — Tank capacity</b>
+          <button @click="fsChart = null">✕ Close</button>
+        </div>
+        <div class="fsbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -544,7 +563,17 @@ onUnmounted(() => {
 .cov.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
 .cov input, .cov button, .cov .covhdr { pointer-events: auto; }
 .cov .covhdr { font-size: 12px; font-weight: 700; color: #334155; cursor: move; user-select: none; padding: 5px 0 4px; border-bottom: 1px solid #eef2f6; margin-bottom: 4px; }
-.chartov { position: absolute; pointer-events: none; padding: 6px; box-sizing: border-box; }
+.chartov { position: absolute; box-sizing: border-box; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: flex; flex-direction: column; overflow: hidden; z-index: 4; }
+.chartov.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
+.chdr { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-bottom: 1px solid #eef2f6; cursor: move; user-select: none; }
+.chname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; color: #334155; }
+.fsbtn { border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; font-size: 12px; line-height: 1; padding: 2px 6px; cursor: pointer; color: #475569; }
+.chbody { flex: 1; min-height: 0; padding: 4px 6px 6px; }
+.fsmodal { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 32px; }
+.fsinner { background: #fff; border-radius: 10px; width: min(1100px, 92vw); height: min(720px, 86vh); display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.fshead { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #1f2d3d; }
+.fshead button { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; padding: 5px 12px; font-weight: 600; cursor: pointer; color: #475569; }
+.fsbody { flex: 1; min-height: 0; padding: 16px; }
 .cov input[type=range] { width: 100%; accent-color: #2563eb; }
 .cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
 .cov .covbtns { display: flex; gap: 4px; }

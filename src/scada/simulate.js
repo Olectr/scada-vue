@@ -42,6 +42,13 @@ function gauge(elm) {
   elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
 }
 
+function quality(elm) {
+  const ph = drift(elm.get('ph') ?? 7.2, 6.6, 7.8, 0.05); elm.set('ph', ph, { silent: true }); elm.attr('phV/text', ph.toFixed(2))
+  const tb = drift(elm.get('turb') ?? 0.8, 0.2, 1.6, 0.08); elm.set('turb', tb, { silent: true }); elm.attr('tbV/text', tb.toFixed(2) + ' NTU')
+  const cl = drift(elm.get('cl') ?? 1.2, 0.6, 1.8, 0.06); elm.set('cl', cl, { silent: true }); elm.attr('clV/text', cl.toFixed(2) + ' mg/L')
+  const dox = drift(elm.get('do') ?? 8.4, 6.5, 9.5, 0.15); elm.set('do', dox, { silent: true }); elm.attr('doV/text', dox.toFixed(1) + ' mg/L')
+}
+
 // ctrlPct: map of element id -> the % of a Control that drives it (last control wins).
 // A pipe whose source is a control-driven pump/valve runs at that control's speed.
 function flowPipe(link, graph, ctrlPct) {
@@ -93,6 +100,7 @@ export function simulateTick(graph) {
       case 's.Pump': pump(elm); break
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm); break
+      case 's.Quality': quality(elm); break
     }
   })
   const ctrlPct = controlMap(graph)
