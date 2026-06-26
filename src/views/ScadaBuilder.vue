@@ -192,7 +192,7 @@ function selectEl(model) {
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
-  sel.angle = model.angle ? Math.round(model.angle()) : 0
+  sel.angle = typeof model.angle === 'function' ? Math.round(model.angle()) : 0
   if (t === 's.Control') {
     sel.targets = (model.get('targets') || []).slice()
     // pumps and valves are the components a control can open/close
@@ -518,14 +518,16 @@ onUnmounted(() => {
           <label v-if="sel.hasName">Name
             <input type="text" v-model="sel.name" @input="applyName">
           </label>
-          <label>Rotate °
-            <input type="range" min="0" max="360" step="15" v-model.number="sel.angle" @input="applyAngle">
-          </label>
-          <div class="pctstep">
-            <button @click="rotateBy(-45)">⟲ 45</button>
-            <span class="pctval">{{ sel.angle }}°</span>
-            <button @click="rotateBy(45)">45 ⟳</button>
-          </div>
+          <template v-if="sel.type !== 's.Control' && sel.type !== 's.Chart'">
+            <label>Rotate °
+              <input type="range" min="0" max="360" step="15" v-model.number="sel.angle" @input="applyAngle">
+            </label>
+            <div class="pctstep">
+              <button @click="rotateBy(-45)">⟲ 45</button>
+              <span class="pctval">{{ sel.angle }}°</span>
+              <button @click="rotateBy(45)">45 ⟳</button>
+            </div>
+          </template>
           <template v-if="sel.hasRange">
             <label>{{ sel.type === 's.PG' ? 'Min' : 'Low mark %' }}
               <input type="number" v-model="sel.simMin" @input="applyRange">

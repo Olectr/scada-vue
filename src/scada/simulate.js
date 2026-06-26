@@ -21,7 +21,7 @@ function tank(elm, isHopper, nodeFlow, outletActive) {
   if (filling && !draining) lvl = clamp(lvl + rnd(1.5, 3.5), 8, 96)
   else if (draining && !filling) lvl = clamp(lvl - rnd(1.5, 3.5), 8, 96)
   else if (filling && draining) lvl = drift(lvl, 8, 96, 1.5)
-  else lvl = drift(lvl, 90, 95, 1.2) // idle: mock high band
+  else lvl = lvl < 90 ? clamp(lvl + rnd(1, 2.5), 8, 95) : drift(lvl, 90, 95, 1.2) // idle: gently climb into 90-95 mock band
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
   else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
