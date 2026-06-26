@@ -19,7 +19,7 @@ function tank(elm, isHopper) {
   const lvl = drift(elm.get('level') ?? 60, lo, hi, 2)
   elm.set('level', lvl, { silent: true })
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
-  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }); setTankMarks(elm) }
+  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
 }
 
 // Visual-only helpers (no value drift) — shared so the builder's edit-mode

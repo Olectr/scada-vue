@@ -168,7 +168,7 @@ function selectEl(model) {
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
-  sel.hasName = t !== 's.PG' && t !== 's.Quality'
+  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap'
   sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
   sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
@@ -372,6 +372,7 @@ onMounted(() => {
     validateMagnet: () => mode.value === 'edit',
     validateConnection: (cv, magnetS, tv, magnetT) => {
       if (mode.value !== 'edit' || !magnetT || tv === cv || !tv.model.isElement()) return false
+      if (tv.model.get('type') === 's.PG') return false // nothing connects INTO a gauge
       // a pressure gauge's dashed leader may attach ONLY to a pressure tap
       if (cv.model.get('type') === 's.PG') return tv.model.get('type') === 's.Tap'
       return true
