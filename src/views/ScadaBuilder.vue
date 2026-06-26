@@ -209,8 +209,7 @@ function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.op
 function applyPct() {
   const m = selModel(); if (!m) return
   m.set('pct', Number(sel.pct))
-  refreshLinks(graph) // linked-pipe speed only — never the full sim tick (would drift on every input event)
-  driveFor(m.id, Number(sel.pct) > 0) // 0% closes linked components, >0% opens them
+  driveFor(m.id, Number(sel.pct) > 0) // 0% closes linked components, >0% opens them (driveFor refreshes links)
   syncControls() // refresh the on-canvas panel's % readout
 }
 function stepPct(d) { sel.pct = Math.max(0, Math.min(100, Number(sel.pct) + d)); applyPct() }
@@ -417,7 +416,11 @@ onMounted(() => {
 })
 
 function startSim() { stopSim(); simulateTick(graph); tankTick(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); if (sel.id) updateSelInfo() }, 1000) }
-function stopSim() { if (simTimer) clearInterval(simTimer); simTimer = null }
+function stopSim() {
+  if (simTimer) clearInterval(simTimer); simTimer = null
+  // stop flow-meter rotors and zero their readout when the sim is paused
+  if (graph) graph.getElements().forEach(e => { if (e.get('type') === 's.Flow') { e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') } })
+}
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {

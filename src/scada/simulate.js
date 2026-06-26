@@ -88,8 +88,8 @@ function flowMeter(elm, graph, nodeFlow) {
       }
       for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
         const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
-        const other = s === id ? tg : s
-        if (other && !seen.has(other)) { seen.add(other); q.push(other) }
+        if (tg !== id) continue // walk UPSTREAM only (inbound pipes) so a downstream pump can't inflate the reading
+        if (s && !seen.has(s)) { seen.add(s); q.push(s) }
       }
     }
   }
@@ -134,7 +134,7 @@ function propagateFlow(graph, ctrlPct) {
     }
     if (t === 's.Zone') return true // supply source
     if (t === 's.Pump') return node.get('on') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
-    if (t === 's.Valve') return node.get('open') && (nodeFlow[node.id] || !inbound[node.id])
+    if (t === 's.Valve') return node.get('open') && !gated(node.id) && (nodeFlow[node.id] || !inbound[node.id])
     return !!nodeFlow[node.id] // tap / flow meter / pass-through: only if fed
   }
   let changed = true, guard = 0
