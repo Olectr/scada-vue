@@ -161,10 +161,12 @@ function propagateFlow(graph, ctrlPct) {
   }
   const canPass = node => {
     const t = node.get('type')
-    if (t === 's.Valve') return !!node.get('open')
+    if (t === 's.Valve') return !!node.get('open') && !gated(node.id)
     if (t === 's.Pump') return !!node.get('on') && !gated(node.id)
     return true
   }
+  // passive instruments draw no volumetric flow → never a hydraulic sink, even at a dead end
+  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1 }
   // SUPPLY forward
   let changed = true, guard = 0
   while (changed && guard < 200) {
@@ -179,7 +181,7 @@ function propagateFlow(graph, ctrlPct) {
   // DEMAND backward — seed sinks (zone/tank/hopper) and open pipe ends (no outgoing pipe)
   graph.getElements().forEach(n => {
     const t = n.get('type')
-    if (t === 's.Zone' || t === 's.Cyl' || t === 's.Hopper' || !outgoing[n.id]) canDrain[n.id] = true
+    if (t === 's.Zone' || t === 's.Cyl' || t === 's.Hopper' || (!outgoing[n.id] && !NON_SINK[t])) canDrain[n.id] = true
   })
   changed = true; guard = 0
   while (changed && guard < 200) {
