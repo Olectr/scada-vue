@@ -323,13 +323,16 @@ const tagList = TAGS
 function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
 
 // --- geometry / z-order / lock ---
-function applyPos() { const m = selModel(); if (m) m.position(Number(sel.x) || 0, Number(sel.y) || 0) }
+function applyPos() { const m = selModel(); if (!m) return; const x = Number(sel.x), y = Number(sel.y); if (Number.isNaN(x) || Number.isNaN(y)) return; m.position(x, y) }
+function refreshSelGeom(cell) { if (sel.id && cell.id === sel.id) { const p = cell.position(); sel.x = Math.round(p.x); sel.y = Math.round(p.y) } }
 function applySize() {
   const m = selModel(); if (!m || m.get('type') !== 's.Custom') return
   const w = Math.max(30, Number(sel.w) || 96), h = Math.max(24, Number(sel.h) || 60)
   m.resize(w, h)
   const map = { top: { x: w / 2, y: 0 }, bottom: { x: w / 2, y: h }, left: { x: 0, y: h / 2 }, right: { x: w, y: h / 2 } }
-  m.set('ports', portsCfg(m.getPorts().map(p => p.id).filter(id => map[id]).map(id => ({ id, ...map[id] })), true))
+  let ps = m.getPorts().map(p => p.id).filter(id => map[id]).map(id => ({ id, ...map[id] }))
+  if (!ps.length) ps = customSidePorts({ sides: { left: true, right: true } }, w, h) // keep links if old port ids
+  m.set('ports', portsCfg(ps, true))
   renderCustom(m)
 }
 function toFront() { const m = selModel(); if (m) m.toFront() }
@@ -359,9 +362,9 @@ function liveFields(m) {
   else if (t === 's.PG') add('Pressure', Number(m.get('value') ?? 0).toFixed(1) + ' bar')
   else if (t === 's.Tap') add('Pressure', Number(m.get('pressure') ?? 0).toFixed(1) + ' bar')
   else if (t === 's.Flow') { add('Flow', (m.get('flow') ?? 0) + ' m³/h'); add('Total', Math.round(m.get('total') || 0) + ' m³') }
-  else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).length) }
+  else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).filter(id => graph.getCell(id)).length) }
   else if (t === 's.Quality') { add('pH', Number(m.get('ph') ?? 0).toFixed(2)); add('Turb', Number(m.get('turb') ?? 0).toFixed(2) + ' NTU'); add('Cl', Number(m.get('cl') ?? 0).toFixed(2)); add('DO', Number(m.get('do') ?? 0).toFixed(1)) }
-  else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
+  else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.max(0, Math.min(100, Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100))) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
   return F
 }
 // pipe styling — separate selection for links (FlowPipe)
@@ -478,6 +481,7 @@ function followControls(cell, position, opt) {
   const dx = position.x - prev.x, dy = position.y - prev.y
   if (!dx && !dy) return
   graph.getElements().forEach(e => {
+    if (e.get('locked')) return
     if (e.get('type') === 's.Control' && (e.get('targets') || []).includes(cell.id)) {
       e.translate(dx, dy, { controlFollow: true })
     }
@@ -732,6 +736,7 @@ onMounted(() => {
 
   // a linked Control follows its target component when that component is dragged
   graph.on('change:position', followControls)
+  graph.on('change:position', refreshSelGeom) // keep inspector X/Y live during a drag
   // keep on-canvas overlays (controls + charts) positioned + in sync
   graph.on('add remove change:position', syncOverlays)
   // snapshot structural edits for undo/redo
@@ -764,7 +769,7 @@ watch(mode, m => { linkSel.id = null; if (m === 'run') startSim(); else stopSim(
 onUnmounted(() => {
   stopSim()
   ctrlDragEnd() // drop any in-flight panel-drag window listeners
-  if (graph) { graph.off('change:position', followControls); graph.off('add remove change:position', syncOverlays); graph.off('add remove change:position change:source change:target change:angle change:size', scheduleSnap) }
+  if (graph) { graph.off('change:position', followControls); graph.off('change:position', refreshSelGeom); graph.off('add remove change:position', syncOverlays); graph.off('add remove change:position change:source change:target change:angle change:size', scheduleSnap) }
   if (fitRO) fitRO.disconnect()
   if (onResize) window.removeEventListener('resize', onResize)
   window.removeEventListener('keydown', onKey)
