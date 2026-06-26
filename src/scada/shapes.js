@@ -106,11 +106,16 @@ export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84,
   val: { x: 42, y: 'calc(h+15)', textAnchor: 'middle', fill: '#0e7490', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
 } }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><path @selector="rotor"/><text @selector="val"/>` })
 
-// New: pressure tap — small inline connector on a pipe; a pressure gauge attaches here.
-export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 22, height: 22 }, attrs: {
-  ring: { cx: 11, cy: 11, r: 10, fill: '#fff', stroke: '#5b6772', strokeWidth: 2 },
-  dot: { cx: 11, cy: 11, r: 4, fill: '#5b6772' },
-} }, { markup: svg`<circle @selector="ring"/><circle @selector="dot"/>` })
+// New: pressure tap — inline pressure indicator (flanged pipe + dial) showing live bar.
+export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 84, height: 48 }, attrs: {
+  flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
+  pipe: { x: 6, y: 18, width: 72, height: 12, fill: SILVER, stroke: '#7c858f' },
+  flR: { x: 76, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
+  head: { cx: 42, cy: 16, r: 15, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
+  dial: { cx: 42, cy: 16, r: 11, fill: '#fde8e8', stroke: '#5b6772' },
+  pVal: { x: 42, y: 20, textAnchor: 'middle', fill: '#b91c1c', fontSize: 10, fontWeight: 'bold', text: '0.0' },
+  val: { x: 42, y: 'calc(h+15)', textAnchor: 'middle', fill: '#b91c1c', fontSize: 12, fontWeight: 'bold', text: '0.0 bar' },
+} }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><text @selector="pVal"/><text @selector="val"/>` })
 
 // New: water-quality analyzer — live pH / Turbidity / Cl / DO readout.
 export const Quality = joint.dia.Element.define('s.Quality', { size: { width: 156, height: 118 }, attrs: {

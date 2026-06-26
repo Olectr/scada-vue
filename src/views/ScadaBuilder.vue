@@ -113,7 +113,7 @@ function makeEl(type) {
     case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
-    case 'tap': return new Tap({ position: { x, y }, ports: portsCfg([{ id: 'p', x: 11, y: 11 }], true) })
+    case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true) })
     case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
@@ -144,6 +144,7 @@ function elemValue(e) {
     case 's.Control': return (e.get('pct') ?? 0) + '% open'
     case 's.Quality': return 'pH ' + Number(e.get('ph') ?? 7.2).toFixed(2)
     case 's.Flow': return (e.get('flow') ?? 0) + ' m³/h'
+    case 's.Tap': return Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
     default: return '—'
   }
 }
@@ -418,8 +419,12 @@ onMounted(() => {
 function startSim() { stopSim(); simulateTick(graph); tankTick(); simTimer = setInterval(() => { simulateTick(graph); tankTick(); if (sel.id) updateSelInfo() }, 1000) }
 function stopSim() {
   if (simTimer) clearInterval(simTimer); simTimer = null
-  // stop flow-meter rotors and zero their readout when the sim is paused
-  if (graph) graph.getElements().forEach(e => { if (e.get('type') === 's.Flow') { e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') } })
+  // zero live meter readouts when the sim is paused
+  if (graph) graph.getElements().forEach(e => {
+    const t = e.get('type')
+    if (t === 's.Flow') { e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') }
+    else if (t === 's.Tap') { e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
+  })
 }
 watch(mode, m => { if (m === 'run') startSim(); else stopSim() })
 

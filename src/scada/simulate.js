@@ -73,29 +73,40 @@ function gauge(elm, graph) {
 
 // flow meter: walk the flow-pipe network from the meter; a running pump reachable
 // without crossing a closed valve gives flow (m³/h ≈ pressure × 120). Respects control gating.
-function flowMeter(elm, graph, nodeFlow) {
-  let mph = 0
-  if (nodeFlow[elm.id]) {
-    // water reaches the meter — read the driving pump's pressure (BFS through open valves)
-    const seen = new Set([elm.id]); const q = [elm.id]; let steps = 0
-    while (q.length && steps < 60) {
-      steps++
-      const id = q.shift(); const node = graph.getCell(id); if (!node) continue
-      const t = node.get('type')
-      if (id !== elm.id) {
-        if (t === 's.Pump') { if (node.get('on')) mph = Math.max(mph, Math.round((node.get('pressure') || 0) * 120)); continue }
-        if (t === 's.Valve' && !node.get('open')) continue
-      }
-      for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
-        const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
-        if (tg !== id) continue // walk UPSTREAM only (inbound pipes) so a downstream pump can't inflate the reading
-        if (s && !seen.has(s)) { seen.add(s); q.push(s) }
-      }
+// max pressure of an ON pump reachable through the connected pipe network (open valves only)
+function connectedPumpPressure(elm, graph) {
+  const seen = new Set([elm.id]); const q = [elm.id]; let p = 0, steps = 0
+  while (q.length && steps < 80) {
+    steps++
+    const id = q.shift(); const node = graph.getCell(id); if (!node) continue
+    const t = node.get('type')
+    if (id !== elm.id) {
+      if (t === 's.Pump') { if (node.get('on')) p = Math.max(p, node.get('pressure') || 0); continue }
+      if (t === 's.Valve' && !node.get('open')) continue
+    }
+    for (const fl of graph.getConnectedLinks(node).filter(x => x.get('type') === 's.FlowPipe')) {
+      const s = fl.source() && fl.source().id, tg = fl.target() && fl.target().id
+      const other = s === id ? tg : s
+      if (other && !seen.has(other)) { seen.add(other); q.push(other) }
     }
   }
+  return p
+}
+
+function flowMeter(elm, graph, nodeFlow) {
+  // flow shown only when water actually reaches the meter; magnitude from the driving pump
+  const mph = nodeFlow[elm.id] ? Math.round(connectedPumpPressure(elm, graph) * 120) : 0
   elm.set('flow', mph, { silent: true })
   elm.attr('val/text', mph + ' m³/h')
   elm.attr('rotor/class', mph > 0 ? 'wp-spin' : '')
+}
+
+// pressure tap: shows the live pressure of the connected running pump (bar)
+function tap(elm, graph) {
+  const bar = connectedPumpPressure(elm, graph)
+  elm.set('pressure', bar, { silent: true })
+  elm.attr('pVal/text', bar.toFixed(1))
+  elm.attr('val/text', bar.toFixed(1) + ' bar')
 }
 
 function quality(elm) {
@@ -182,6 +193,7 @@ export function simulateTick(graph) {
       case 's.Valve': valve(elm); break
       case 's.PG': gauge(elm, graph); break
       case 's.Flow': flowMeter(elm, graph, nodeFlow); break
+      case 's.Tap': tap(elm, graph); break
       case 's.Quality': quality(elm); break
     }
   })
