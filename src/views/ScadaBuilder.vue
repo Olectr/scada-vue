@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
@@ -14,13 +14,28 @@ const STAGE_W = 1500, STAGE_H = 660
 const mode = ref('edit') // 'edit' | 'run'
 let paper = null, graph = null, fitRO = null, onResize = null, simTimer = null
 
+// --- in-app dialog (replaces native confirm/alert/prompt) ---
+const dlg = reactive({ open: false, mode: 'confirm', title: '', message: '', value: '', okText: 'OK', danger: false })
+let dlgResolve = null
+function openDialog(opts) {
+  Object.assign(dlg, { open: true, mode: 'confirm', title: '', message: '', value: '', okText: 'OK', danger: false }, opts)
+  return new Promise(r => { dlgResolve = r })
+}
+function dlgOk() { dlg.open = false; const r = dlgResolve; dlgResolve = null; if (r) r(dlg.mode === 'prompt' ? (dlg.value || '').trim() : true) }
+function dlgCancel() { dlg.open = false; const r = dlgResolve; dlgResolve = null; if (r) r(dlg.mode === 'prompt' ? null : false) }
+function confirmBox(message, o = {}) { return openDialog({ mode: 'confirm', message, title: o.title || 'Confirm', okText: o.okText || 'OK', danger: !!o.danger }) }
+function alertBox(message, title = 'Notice') { return openDialog({ mode: 'alert', message, title, okText: 'OK' }) }
+function promptBox(message, value = '', title = 'Enter') { return openDialog({ mode: 'prompt', message, value, title, okText: 'Save' }) }
+const dlgInput = ref(null)
+watch(() => dlg.open, o => { if (o && dlg.mode === 'prompt') nextTick(() => { dlgInput.value && (dlgInput.value.focus(), dlgInput.value.select()) }) })
+
 const LS_KEY = 'scada.builder.layouts'
 const names = ref([])
 const currentName = ref('')
 function loadIndex() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} } }
 function refreshNames() { names.value = Object.keys(loadIndex()) }
-function saveLayout() {
-  const name = (prompt('Save layout as:', currentName.value || 'My SCADA') || '').trim()
+async function saveLayout() {
+  const name = await promptBox('Save layout as:', currentName.value || 'My SCADA', 'Save layout')
   if (!name) return
   const idx = loadIndex(); idx[name] = graph.toJSON()
   localStorage.setItem(LS_KEY, JSON.stringify(idx))
@@ -35,24 +50,24 @@ function loadLayout(name) {
   reseedCounters() // keep auto-naming from colliding with loaded names
   currentName.value = name; selectEl(null); syncOverlays(); resetHistory()
 }
-function deleteLayout() {
+async function deleteLayout() {
   if (!currentName.value) return
-  if (!confirm(`Delete layout "${currentName.value}"?`)) return
+  if (!(await confirmBox(`Delete layout "${currentName.value}"?`, { title: 'Delete layout', okText: 'Delete', danger: true }))) return
   const idx = loadIndex(); delete idx[currentName.value]
   localStorage.setItem(LS_KEY, JSON.stringify(idx))
   currentName.value = ''; refreshNames()
 }
-function newLayout() {
-  if (!confirm('Clear the canvas and start a new layout?')) return
+async function newLayout() {
+  if (!(await confirmBox('Clear the canvas and start a new layout?', { title: 'New layout', okText: 'Clear', danger: true }))) return
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
   resetHistory()
 }
 
 // starter templates — build a ready-made screen the user can tweak
-function loadTemplate(kind) {
+async function loadTemplate(kind) {
   if (!kind || !graph) return
-  if (graph.getElements().length && !confirm('Replace the canvas with this template?')) return
+  if (graph.getElements().length && !(await confirmBox('Replace the canvas with this template?', { title: 'Load template', okText: 'Replace', danger: true }))) return
   mode.value = 'edit'
   graph.clear(); for (const k in counters) delete counters[k]
   const mk = type => { const e = makeEl(type); graph.addCell(e); return e }
@@ -124,7 +139,7 @@ function importJson(e) {
   r.onload = () => {
     let g
     try { const env = JSON.parse(r.result); g = env && env.graph ? env.graph : env }
-    catch { alert('Invalid JSON file.'); return }
+    catch { alertBox('Invalid JSON file.', 'Import failed'); return }
     try {
       mode.value = 'edit'
       graph.fromJSON(g)
@@ -132,7 +147,7 @@ function importJson(e) {
       reseedCounters()
       currentName.value = ''
       selectEl(null); syncOverlays(); resetHistory()
-    } catch { alert('This JSON is not a SCADA layout (could not rebuild the screen).') }
+    } catch { alertBox('This JSON is not a SCADA layout (could not rebuild the screen).', 'Import failed') }
   }
   r.readAsText(f)
 }
@@ -257,7 +272,7 @@ function importCompLib(e) {
       const have = new Set(customComps.value.map(c => c.id))
       customComps.value = [...customComps.value, ...arr.filter(c => c && c.id && !have.has(c.id))]
       persistCustomComps()
-    } catch { alert('Invalid component library file.') }
+    } catch { alertBox('Invalid component library file.', 'Import failed') }
   }
   r.readAsText(f)
 }
@@ -265,10 +280,10 @@ function importCompLib(e) {
 // --- AI prompt → auto-generate a screen (local heuristic parser; swap in an LLM here) ---
 const ai = reactive({ open: false, text: '' })
 function openAi() { ai.open = true; if (!ai.text) ai.text = '2 tanks, 2 pumps, 2 valves, a flow meter, a control and a chart' }
-function generateFromPrompt() {
+async function generateFromPrompt() {
   if (!graph) return
   const text = (ai.text || '').toLowerCase()
-  if (graph.getElements().length && !confirm('Replace the canvas with the generated design?')) return
+  if (graph.getElements().length && !(await confirmBox('Replace the canvas with the generated design?', { title: 'AI Generate', okText: 'Generate', danger: true }))) return
   const prev = snapKey() // so the pre-generate canvas can be restored (undo / on error)
   ai.open = false; mode.value = 'edit'
   restoring = true // suppress per-add snapshots while building
@@ -303,7 +318,7 @@ function generateFromPrompt() {
   } catch (err) {
     graph.fromJSON(JSON.parse(prev)); migrateCells() // build failed → restore the previous canvas
     restoring = false; selectEl(null); syncOverlays()
-    alert('Could not generate the design.'); return
+    alertBox('Could not generate the design.', 'Generation failed'); return
   }
   restoring = false
   currentName.value = ''; selectEl(null); syncOverlays()
@@ -676,6 +691,7 @@ function exportPng() {
 
 // keyboard: undo/redo, duplicate, delete (ignored while typing in a field)
 function onKey(e) {
+  if (dlg.open) { if (e.key === 'Escape') { e.preventDefault(); dlgCancel() } else if (e.key === 'Enter' && dlg.mode !== 'prompt') { e.preventDefault(); dlgOk() } return }
   const tag = (e.target && e.target.tagName) || ''
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
   const mod = e.metaKey || e.ctrlKey
@@ -1066,6 +1082,24 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- in-app confirm / alert / prompt dialog -->
+    <div v-if="dlg.open" class="fsmodal" @click.self="dlgCancel">
+      <div class="dlg confirmdlg">
+        <div class="cdlg-body">
+          <div class="cdlg-icon" :class="{ danger: dlg.danger }">
+            <component :is="dlg.danger ? Trash2 : (dlg.mode === 'alert' ? X : Pencil)" :size="20" />
+          </div>
+          <div class="cdlg-title">{{ dlg.title }}</div>
+          <div class="cdlg-msg">{{ dlg.message }}</div>
+          <input v-if="dlg.mode === 'prompt'" ref="dlgInput" type="text" v-model="dlg.value" @keyup.enter="dlgOk" class="cdlg-input">
+        </div>
+        <div class="cdlg-actions">
+          <button v-if="dlg.mode !== 'alert'" class="cdlg-cancel" @click="dlgCancel">Cancel</button>
+          <button class="cdlg-ok" :class="{ danger: dlg.danger }" @click="dlgOk">{{ dlg.okText }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1119,6 +1153,23 @@ onUnmounted(() => {
 .chbody { flex: 1; min-height: 0; padding: 4px 6px 6px; }
 .fsmodal { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(3px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 32px; animation: modalfade .18s ease-out; }
 .fsinner { background: #fff; border-radius: 14px; width: min(1100px, 92vw); height: min(720px, 86vh); display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.35); animation: modalpop .26s cubic-bezier(.32,.72,0,1); }
+/* confirm/alert/prompt dialog */
+.confirmdlg { width: min(360px, 92vw); }
+.cdlg-body { padding: 22px 22px 16px; text-align: center; }
+.cdlg-icon { width: 46px; height: 46px; margin: 0 auto 12px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.cdlg-icon.danger { background: #fee2e2; color: #dc2626; }
+.cdlg-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.cdlg-msg { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.cdlg-input { width: 100%; margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; font-size: 14px; color: var(--text); background: var(--surface); }
+.cdlg-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cdlg-actions { display: flex; gap: 8px; padding: 14px 18px 18px; }
+.cdlg-actions button { flex: 1; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: filter .15s ease, background .15s ease; }
+.cdlg-cancel { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.cdlg-cancel:hover { background: var(--surface-2); }
+.cdlg-ok { border: none; background: var(--accent); color: #fff; }
+.cdlg-ok:hover { filter: brightness(1.08); }
+.cdlg-ok.danger { background: #dc2626; }
+.builder.dark .cdlg-icon.danger { background: rgba(220,38,38,.2); }
 @keyframes modalfade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes modalpop { from { opacity: 0; transform: scale(.95) translateY(12px) } to { opacity: 1; transform: none } }
 @media (prefers-reduced-motion: reduce) { .fsmodal, .fsinner, .dlg { animation: none !important } }
