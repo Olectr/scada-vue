@@ -882,13 +882,13 @@ onUnmounted(() => {
             <input type="text" v-model="sel.name" @input="applyName">
           </label>
           <template v-if="sel.type !== 's.Control' && sel.type !== 's.Chart'">
-            <label>Rotate °
+            <label>Rotate
               <input type="range" min="0" max="360" step="15" v-model.number="sel.angle" @input="applyAngle">
             </label>
-            <div class="pctstep">
-              <button @click="rotateBy(-45)">⟲ 45</button>
-              <span class="pctval">{{ sel.angle }}°</span>
-              <button @click="rotateBy(45)">45 ⟳</button>
+            <div class="seg">
+              <button @click="rotateBy(-45)">−45°</button>
+              <span class="segval">{{ sel.angle }}°</span>
+              <button @click="rotateBy(45)">+45°</button>
             </div>
           </template>
           <template v-if="sel.hasRange">
@@ -965,11 +965,11 @@ onUnmounted(() => {
               <label>W<input type="number" v-model.number="sel.w" @input="applySize"></label>
               <label>H<input type="number" v-model.number="sel.h" @input="applySize"></label>
             </div>
-            <div class="pctstep">
+            <div class="seg">
               <button @click="toBack">⤓ Back</button>
               <button @click="toFront">⤒ Front</button>
-              <label class="chk" style="margin-left:auto"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> 🔒 Lock</label>
             </div>
+            <label class="chk lockrow"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> Lock position</label>
           </div>
           <!-- notes + tag -->
           <div class="targets">
@@ -1088,10 +1088,14 @@ onUnmounted(() => {
 .chname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; color: #334155; }
 .fsbtn { border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; font-size: 12px; line-height: 1; padding: 2px 6px; cursor: pointer; color: #475569; }
 .chbody { flex: 1; min-height: 0; padding: 4px 6px 6px; }
-.fsmodal { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 32px; }
-.fsinner { background: #fff; border-radius: 10px; width: min(1100px, 92vw); height: min(720px, 86vh); display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
-.fshead { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #1f2d3d; }
-.fshead button { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; padding: 5px 12px; font-weight: 600; cursor: pointer; color: #475569; }
+.fsmodal { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(3px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 32px; animation: modalfade .18s ease-out; }
+.fsinner { background: #fff; border-radius: 14px; width: min(1100px, 92vw); height: min(720px, 86vh); display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.35); animation: modalpop .26s cubic-bezier(.32,.72,0,1); }
+@keyframes modalfade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes modalpop { from { opacity: 0; transform: scale(.95) translateY(12px) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) { .fsmodal, .fsinner, .dlg { animation: none !important } }
+.fshead { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #eef2f6; font-size: 15px; font-weight: 700; color: #0f172a; }
+.fshead button { width: 28px; height: 28px; display: grid; place-items: center; border: none; background: #f1f5f9; border-radius: 50%; font-size: 13px; cursor: pointer; color: #475569; transition: background .15s ease; }
+.fshead button:hover { background: #e2e8f0; }
 .fsbody { flex: 1; min-height: 0; padding: 16px; }
 .cov input[type=range] { width: 100%; accent-color: #2563eb; }
 .cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
@@ -1156,14 +1160,26 @@ onUnmounted(() => {
 .customrow .ccadd { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; }
 .customrow .ccdel { color: #ef4444; font-weight: 700; padding: 5px 8px; }
 .newcomp { width: 100%; border-style: dashed !important; color: #6366f1 !important; }
-.dlg { background: #fff; border-radius: 10px; width: min(420px, 92vw); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
-.dlgbody { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
-.dlgbody label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #475569; }
-.dlgbody input, .dlgbody textarea { border: 1px solid #cbd5e1; border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
-.dlgbody input[type=color] { height: 30px; padding: 1px; }
-.dlgbody .primary { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.dlg { background: #fff; border-radius: 16px; width: min(420px, 92vw); box-shadow: 0 24px 60px rgba(0,0,0,.32); overflow: hidden; animation: modalpop .26s cubic-bezier(.32,.72,0,1); }
+.dlgbody { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.dlgbody label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+.dlgbody input, .dlgbody textarea, .dlgbody select { border: 1px solid #d7dde5; border-radius: 8px; padding: 9px 10px; font-size: 13px; font-family: inherit; color: #0f172a; transition: border-color .15s ease, box-shadow .15s ease; }
+.dlgbody input:focus, .dlgbody textarea:focus, .dlgbody select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.dlgbody input[type=color] { height: 36px; padding: 2px; cursor: pointer; }
+.dlgbody .tlabel { margin-bottom: 6px; }
+.dlgbody .primary { margin-top: 4px; background: #2563eb; color: #fff; border: none; border-radius: 10px; padding: 11px; font-weight: 700; font-size: 14px; cursor: pointer; transition: background .15s ease, transform .1s ease; }
+.dlgbody .primary:hover { background: #1d4ed8; }
+.dlgbody .primary:active { transform: scale(.98); }
 .frow { display: flex; gap: 8px; }
-.frow label { flex: 1; }
+.frow label { flex: 1; min-width: 0; }
+/* segmented button row (rotate / z-order) — auto width, no overflow */
+.seg { display: flex; align-items: center; gap: 6px; }
+.seg button { flex: 1; min-height: 30px; padding: 0 8px; font-size: 12px; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #334155; cursor: pointer; white-space: nowrap; transition: background .15s ease, border-color .15s ease; }
+.seg button:hover { background: #f1f5f9; border-color: #94a3b8; }
+.seg button:active { transform: scale(.97); }
+.seg .segval { flex: none; min-width: 48px; text-align: center; font-size: 13px; font-weight: 700; color: #2563eb; font-variant-numeric: tabular-nums; }
+.lockrow { font-weight: 500; font-size: 12px; }
+.builder.dark .seg button { background: #0f172a; color: #cbd5e1; border-color: #334155; }
 .sides { display: flex; flex-wrap: wrap; gap: 8px; }
 .sides .chk { flex-direction: row; align-items: center; gap: 4px; font-weight: 500; }
 .liblinks { display: flex; gap: 12px; margin-top: 6px; }
