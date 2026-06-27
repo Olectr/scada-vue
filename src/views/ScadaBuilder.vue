@@ -4,6 +4,8 @@ import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus } from 'lucide-vue-next'
+const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 
 const host = ref(null)
 const fitEl = ref(null)
@@ -783,46 +785,54 @@ onUnmounted(() => {
   <div class="builder" :class="{ dark }">
     <div class="toolbar">
       <strong>SCADA Builder</strong>
-      <button @click="newLayout">＋ New</button>
-      <button @click="saveLayout">💾 Save</button>
-      <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)">
-        <option value="">Load…</option>
-        <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
-      </select>
-      <button :disabled="!currentName" @click="deleteLayout">🗑 Delete</button>
-      <button :disabled="!canUndo" title="Undo (⌘/Ctrl+Z)" @click="undo">↶</button>
-      <button :disabled="!canRedo" title="Redo (⌘/Ctrl+Shift+Z)" @click="redo">↷</button>
-      <button :disabled="!sel.id || mode === 'run'" title="Duplicate (⌘/Ctrl+D)" @click="duplicateSel">⧉</button>
-      <button @click="exportJson">⬇ JSON</button>
-      <button @click="pickImport">⬆ JSON</button>
-      <button @click="exportPng">🖼 PNG</button>
-      <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''">
-        <option value="">Template…</option>
-        <option value="water">Water Treatment</option>
-        <option value="dual">Dual Pump</option>
-      </select>
-      <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
-      <button class="ai" @click="openAi">🤖 AI Generate</button>
+      <div class="tgroup">
+        <button title="New" @click="newLayout"><FilePlus2 :size="15" /></button>
+        <button title="Save" @click="saveLayout"><Save :size="15" /></button>
+        <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)">
+          <option value="">Load…</option>
+          <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
+        </select>
+        <button :disabled="!currentName" title="Delete layout" @click="deleteLayout"><Trash2 :size="15" /></button>
+      </div>
+      <div class="tgroup">
+        <button :disabled="!canUndo" title="Undo (⌘/Ctrl+Z)" @click="undo"><Undo2 :size="15" /></button>
+        <button :disabled="!canRedo" title="Redo (⌘/Ctrl+Shift+Z)" @click="redo"><Redo2 :size="15" /></button>
+        <button :disabled="!sel.id || mode === 'run'" title="Duplicate (⌘/Ctrl+D)" @click="duplicateSel"><Copy :size="15" /></button>
+      </div>
+      <div class="tgroup">
+        <button title="Export JSON" @click="exportJson"><Download :size="15" /></button>
+        <button title="Import JSON" @click="pickImport"><Upload :size="15" /></button>
+        <button title="Export PNG" @click="exportPng"><ImageIcon :size="15" /></button>
+        <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''">
+          <option value="">Template…</option>
+          <option value="water">Water Treatment</option>
+          <option value="dual">Dual Pump</option>
+        </select>
+        <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
+      </div>
+      <button class="ai" @click="openAi"><Sparkles :size="15" /> AI Generate</button>
       <span class="sp"></span>
-      <button :class="{ on: dark }" title="Dark mode" @click="dark = !dark">🌙</button>
-      <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">✎ Edit</button>
-      <button :class="{ on: mode === 'run' }" @click="mode = 'run'">▶ Run</button>
+      <button class="iconbtn" :class="{ on: dark }" title="Dark mode" @click="dark = !dark"><Moon :size="15" /></button>
+      <div class="modeswitch">
+        <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
+        <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
+      </div>
     </div>
     <div class="cols">
       <aside class="palette">
         <div class="ptitle">Components</div>
         <button v-for="p in palette" :key="p.type" :disabled="mode === 'run'" @click="addComponent(p.type)">
-          <span class="ico">{{ p.ico }}</span> {{ p.label }}
+          <component :is="PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
         </button>
-        <div class="ptitle" style="margin-top:12px">My Components</div>
+        <div class="ptitle" style="margin-top:14px">My Components</div>
         <div v-for="c in customComps" :key="c.id" class="customrow">
-          <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><span class="ico" style="color:#6366f1">◧</span> {{ c.label }}</button>
-          <button class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)">✕</button>
+          <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
+          <button class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="14" /></button>
         </div>
-        <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm">＋ New component</button>
+        <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm"><Plus :size="15" /> New component</button>
         <div class="liblinks">
-          <a @click="exportCompLib">⬇ Export lib</a>
-          <a @click="pickCompLib">⬆ Import lib</a>
+          <a @click="exportCompLib"><Download :size="13" /> Export</a>
+          <a @click="pickCompLib"><Upload :size="13" /> Import</a>
           <input ref="libInput" type="file" accept="application/json,.json" style="display:none" @change="importCompLib">
         </div>
         <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
@@ -969,7 +979,7 @@ onUnmounted(() => {
               <button @click="toBack">⤓ Back</button>
               <button @click="toFront">⤒ Front</button>
             </div>
-            <label class="chk lockrow"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> Lock position</label>
+            <label class="chk lockrow"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> <LockIcon :size="13" /> Lock position</label>
           </div>
           <!-- notes + tag -->
           <div class="targets">
@@ -996,7 +1006,7 @@ onUnmounted(() => {
     <!-- new custom component -->
     <div v-if="compForm.open" class="fsmodal" @click.self="compForm.open = false">
       <div class="dlg">
-        <div class="fshead"><b>New custom component</b><button @click="compForm.open = false">✕</button></div>
+        <div class="fshead"><b>New custom component</b><button @click="compForm.open = false"><X :size="15" /></button></div>
         <div class="dlgbody">
           <label>Name<input type="text" v-model="compForm.label"></label>
           <div class="frow">
@@ -1048,7 +1058,7 @@ onUnmounted(() => {
     <!-- AI generate -->
     <div v-if="ai.open" class="fsmodal" @click.self="ai.open = false">
       <div class="dlg">
-        <div class="fshead"><b>🤖 Generate from prompt</b><button @click="ai.open = false">✕</button></div>
+        <div class="fshead"><b><Sparkles :size="15" style="vertical-align:-2px" /> Generate from prompt</b><button @click="ai.open = false"><X :size="15" /></button></div>
         <div class="dlgbody">
           <textarea v-model="ai.text" rows="3" placeholder="e.g. 2 tanks, 3 pumps, 2 valves, a flow meter, a control and a chart"></textarea>
           <div class="hint">Local parser: reads component types + counts and builds a connected chain. (Swap in an LLM for richer prompts.)</div>
@@ -1060,21 +1070,40 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.builder { width: 100%; height: 100%; display: flex; flex-direction: column; }
-.toolbar { display: flex; align-items: center; gap: 8px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 12px; margin-bottom: 8px; font-size: 13px; color: #334155; }
+/* design tokens — single accent, soft neutrals (light + dark) */
+.builder {
+  --surface: #ffffff; --surface-2: #f8fafc; --bar: #f8fafc; --border: #e7ebf0;
+  --text: #0f172a; --muted: #64748b; --accent: #4f46e5; --accent-soft: rgba(79,70,229,.12);
+  --r-sm: 6px; --r-md: 8px; --r-lg: 10px;
+  width: 100%; height: 100%; display: flex; flex-direction: column; color: var(--text);
+}
+.builder.dark { --surface: #111827; --surface-2: #0b1220; --bar: #0f172a; --border: #283449; --text: #e5e7eb; --muted: #94a3b8; }
+.toolbar { display: flex; align-items: center; gap: 6px; background: var(--bar); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 6px 10px; margin-bottom: 8px; font-size: 13px; color: var(--text); }
+.toolbar > strong { font-weight: 700; letter-spacing: .01em; margin-right: 2px; }
 .toolbar .sp { flex: 1; }
-.toolbar button, .palette button { font-size: 12px; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 10px; background: #fff; color: #475569; cursor: pointer; }
-.toolbar button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+.tgroup { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--border); }
+.modeswitch { display: flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 2px; }
+.modeswitch button { border: none; background: transparent; }
+.modeswitch button.on { box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.toolbar button, .palette button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border: 1px solid transparent; border-radius: var(--r-md); padding: 6px 9px; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.toolbar button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.toolbar button:disabled { opacity: .4; cursor: not-allowed; }
+.toolbar button.on { background: var(--accent); color: #fff; }
+.toolbar button.ai { background: var(--accent); color: #fff; padding: 6px 12px; }
+.toolbar button.ai:hover { filter: brightness(1.08); background: var(--accent); color: #fff; }
+.toolbar .loadsel { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.builder.dark .toolbar { color: var(--text); }
 .cols { display: flex; gap: 8px; flex: 1; min-height: 0; }
-.palette, .inspector { width: 180px; flex: none; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; overflow: auto; }
-.inspector { width: 220px; }
-.palette button { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 6px; text-align: left; }
+.palette, .inspector { width: 184px; flex: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px; overflow: auto; }
+.inspector { width: 228px; }
+.palette button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 3px; text-align: left; padding: 7px 9px; }
+.palette button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .palette button:disabled { opacity: .45; cursor: not-allowed; }
-.ptitle { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
-.hint { font-size: 11px; color: #64748b; margin-top: 10px; }
-.empty { font-size: 12px; color: #94a3b8; }
-.ico { width: 18px; text-align: center; }
-.fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
+.ptitle { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.empty { font-size: 12px; color: var(--muted); }
+.ico { flex: none; color: var(--accent); }
+.fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
 .paper { position: absolute; top: 0; left: 0; }
 /* the control panel IS the control; gaps are click-through, interactive parts + header capture pointer */
 .cov { position: absolute; width: 124px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); text-align: center; pointer-events: none; z-index: 5; }
@@ -1182,8 +1211,11 @@ onUnmounted(() => {
 .builder.dark .seg button { background: #0f172a; color: #cbd5e1; border-color: #334155; }
 .sides { display: flex; flex-wrap: wrap; gap: 8px; }
 .sides .chk { flex-direction: row; align-items: center; gap: 4px; font-weight: 500; }
-.liblinks { display: flex; gap: 12px; margin-top: 6px; }
-.liblinks a { font-size: 11px; color: #6366f1; cursor: pointer; text-decoration: underline; }
+.liblinks { display: flex; gap: 14px; margin-top: 8px; padding-left: 2px; }
+.liblinks a { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.liblinks a:hover { text-decoration: underline; }
+.newcomp { justify-content: center; border: 1px dashed var(--border) !important; color: var(--accent) !important; margin-top: 4px; }
+.newcomp:hover:not(:disabled) { border-color: var(--accent) !important; }
 .builder.dark .dlg { background: #1e293b; }
 .builder.dark .dlgbody label { color: #cbd5e1; }
 .builder.dark .dlgbody input, .builder.dark .dlgbody textarea { background: #0f172a; color: #e2e8f0; border-color: #334155; }
