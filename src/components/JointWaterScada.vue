@@ -1,6 +1,7 @@
 <script setup>
 // SCADA P&ID (JointJS demo style) on @joint/core. Port-anchored pipes (stay connected on drag),
 // grey tube + green flow, dynamic red arc pressure gauges, live tanks/valves/pumps.
+// grey tube + green flow, dynamic red arc pressure gauges, live tanks/valves/pumps.
 import { ref, reactive, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import * as joint from '@joint/core'
 import { state } from '../composables/usePlantData'
