@@ -4,7 +4,7 @@ import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
-import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus } from 'lucide-vue-next'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight } from 'lucide-vue-next'
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 
 const host = ref(null)
@@ -170,19 +170,27 @@ const palette = [
 const counters = reactive({})
 function nextName(base) { counters[base] = (counters[base] || 0) + 1; return `${base} ${counters[base]}` }
 
+// external panel/DER/param linkage placeholders — filled in later via API; every
+// newly created component gets one of these per dynamic property it exposes
+function defaultMetrics(keys) {
+  const m = {}
+  for (const k of keys) m[k] = { panelId: null, derId: null, paramId: null, value: null }
+  return m
+}
+
 function makeEl(type) {
   const x = STAGE_W / 2 - 75, y = STAGE_H / 2 - 100
   switch (type) {
-    case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 70 }); setTankMarks(tk); return tk }
-    case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95 })
-    case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2 })
-    case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true })
-    case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true) })
-    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true })
+    case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) }); setTankMarks(tk); return tk }
+    case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95, metrics: defaultMetrics(['level']) })
+    case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2, metrics: defaultMetrics(['on', 'pressure', 'runtime']) })
+    case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true, metrics: defaultMetrics(['open']) })
+    case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) })
+    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true, metrics: defaultMetrics(['pct']) })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
-    case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true) })
-    case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true) })
-    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } } })
+    case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true), metrics: defaultMetrics(['pressure']) })
+    case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true), metrics: defaultMetrics(['flow', 'total']) })
+    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
     case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } } })
   }
@@ -242,6 +250,7 @@ function customSidePorts(def, w, h) {
   if (!ps.length) ps.push({ id: 'left', x: 0, y: h / 2 }, { id: 'right', x: w, y: h / 2 })
   return ps
 }
+const CUSTOM_BEHAVIOR_METRIC_KEYS = { level: ['level'], meter: ['value'], onoff: ['on'], openclose: ['open'], static: [] }
 function makeCustom(def, x, y) {
   const w = def.w || 96, h = def.h || 60
   const el = new Custom({
@@ -251,6 +260,7 @@ function makeCustom(def, x, y) {
     behavior: def.behavior || 'static', vmin: def.vmin ?? 0, vmax: def.vmax ?? 100, unit: def.unit || '',
     on: true, open: true, level: 60, value: ((def.vmin ?? 0) + (def.vmax ?? 100)) / 2,
     ports: portsCfg(customSidePorts(def, w, h), true),
+    metrics: defaultMetrics(CUSTOM_BEHAVIOR_METRIC_KEYS[def.behavior || 'static'] || []),
   })
   renderCustom(el); return el
 }
@@ -674,6 +684,11 @@ function computeAlarms() {
 const dark = ref(false)
 watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0f172a' : '#ffffff' }) })
 
+// --- tablet/mobile drawers for palette + inspector (desktop ignores these) ---
+const paletteOpen = ref(false)
+const inspectorOpen = ref(false)
+function closeDrawers() { paletteOpen.value = false; inspectorOpen.value = false }
+
 // --- export the diagram as a PNG image ---
 function exportPng() {
   const svg = host.value && host.value.querySelector('svg'); if (!svg) return
@@ -828,14 +843,17 @@ onUnmounted(() => {
       </div>
       <button class="ai" @click="openAi"><Sparkles :size="15" /> AI Generate</button>
       <span class="sp"></span>
+      <button class="drawer-toggle" :class="{ on: paletteOpen }" title="Components" @click="paletteOpen = !paletteOpen; inspectorOpen = false"><PanelLeft :size="15" /></button>
+      <button class="drawer-toggle" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen; paletteOpen = false"><PanelRight :size="15" /></button>
       <button class="iconbtn" :class="{ on: dark }" title="Dark mode" @click="dark = !dark"><Moon :size="15" /></button>
       <div class="modeswitch">
         <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
         <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
       </div>
     </div>
+    <div class="drawer-backdrop" :class="{ show: paletteOpen || inspectorOpen }" @click="closeDrawers"></div>
     <div class="cols">
-      <aside class="palette">
+      <aside class="palette" :class="{ open: paletteOpen }">
         <div class="ptitle">Components</div>
         <button v-for="p in palette" :key="p.type" :disabled="mode === 'run'" @click="addComponent(p.type)">
           <component :is="PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
@@ -885,7 +903,7 @@ onUnmounted(() => {
         <!-- alarm badges pulse on components that breach a setpoint -->
         <div v-for="a in alarmsUi" :key="a.id" class="alarmbadge" :style="{ left: (a.x * scale - 6) + 'px', top: (a.y * scale - 18) + 'px' }">⚠</div>
       </div>
-      <aside class="inspector">
+      <aside class="inspector" :class="{ open: inspectorOpen }">
         <div class="ptitle">Inspector</div>
         <div v-if="linkSel.id" class="fields">
           <div class="tlabel">Pipe</div>
@@ -1268,6 +1286,32 @@ onUnmounted(() => {
 .liblinks a:hover { text-decoration: underline; }
 .newcomp { justify-content: center; border: 1px dashed var(--border) !important; color: var(--accent) !important; margin-top: 4px; }
 .newcomp:hover:not(:disabled) { border-color: var(--accent) !important; }
+
+/* ---------- responsive: palette/inspector become off-canvas drawers ---------- */
+.drawer-toggle { display: none; }
+.drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 900; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.drawer-backdrop.show { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 900px) {
+  .toolbar { overflow-x: auto; }
+  .drawer-toggle { display: inline-flex; }
+  .drawer-backdrop { display: block; }
+  .cols { position: relative; }
+  .palette, .inspector {
+    position: fixed; top: 0; bottom: 0; width: 260px; z-index: 901;
+    transition: transform .25s ease;
+  }
+  .palette { left: 0; transform: translateX(-100%); border-right: 1px solid var(--border); }
+  .palette.open { transform: translateX(0); }
+  .inspector { right: 0; width: 280px; transform: translateX(100%); border-left: 1px solid var(--border); }
+  .inspector.open { transform: translateX(0); }
+}
+
+@media (max-width: 480px) {
+  .toolbar > strong { display: none; }
+  .palette, .inspector { width: 88vw; }
+  .fsinner { width: 96vw; height: 90vh; }
+}
 </style>
 
 <style>

@@ -23,7 +23,7 @@ function go(id) { active.value = id; drawer.value = false }
       <button class="burger" :class="{ open: drawer }" @click="drawer = !drawer" aria-label="Toggle menu">
         <span></span><span></span><span></span>
       </button>
-      <h1>{{ current.title }}</h1>
+      <img class="topbar-logo" src="/olectr-logo.png" alt="Olectr" />
       <div class="right">
         <div class="conn"><span class="dot"></span> {{ state.broker }}</div>
         <div class="conn">Date <b style="color:var(--txt)">23/06/2026</b></div>
@@ -38,9 +38,7 @@ function go(id) { active.value = id; drawer.value = false }
     <div class="backdrop" :class="{ show: drawer }" @click="drawer = false"></div>
 
     <aside class="side" :class="{ open: drawer }">
-      <div class="logo">
-        <img class="logo-img" src="/olectr-logo.png" alt="Olectr" />
-      </div>
+      
       <nav class="nav">
         <a v-for="s in screens" :key="s.id" :class="{ active: active === s.id }" @click="go(s.id)">
           <span class="ico">{{ s.ico }}</span> {{ s.label }}

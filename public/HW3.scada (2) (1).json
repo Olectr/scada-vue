@@ -1,0 +1,2791 @@
+{
+  "app": "scada-builder",
+  "version": 1,
+  "name": "HW3",
+  "graph": {
+    "cells": [
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "a77d9124-675e-464e-9380-0749016a6bf1",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "target": {
+          "id": "6635eed8-bb30-49f5-81bd-7fb354caeb84",
+          "magnet": "circle",
+          "port": "bot"
+        },
+        "id": "70ad5474-e55f-491d-b856-32c8266b86b7"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "4384d70e-3671-496b-95e4-5d462df5c341",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "69b14894-7b3c-4144-b901-07d63c52bed9",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "id": "ea550d10-12c1-44b0-ba4d-762931018b70"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "2976e8c3-fc46-4b00-aa85-1392317d10ac",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "target": {
+          "id": "22600890-7f6c-4d31-a610-aa62aeaa14dd",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "9d2cce28-1306-4d58-ae35-e582d1a50390"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "6635eed8-bb30-49f5-81bd-7fb354caeb84",
+          "magnet": "circle",
+          "port": "top"
+        },
+        "target": {
+          "id": "2c4756cf-2d2e-4ae4-b2fa-22bb422706e5",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "b27bc514-010f-428a-a19e-7f95b4ffcb93"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "6635eed8-bb30-49f5-81bd-7fb354caeb84",
+          "magnet": "circle",
+          "port": "bot"
+        },
+        "target": {
+          "id": "6d61270c-b7b4-4833-931e-16d4a574cf12",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "8fcd7885-1757-46a4-9d1c-e94f34b306c7"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "ab8b28e4-3486-4eb5-acf1-0016fa2850ba",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "target": {
+          "id": "dfc97fd9-5c19-426c-8c6f-5ee6c9e0c6f3",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "29fd9783-2b4a-4a4d-945f-c2e75a1f575b"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "22600890-7f6c-4d31-a610-aa62aeaa14dd",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "d552f7d6-57bb-47ad-979c-97564e175d64",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "52e02a8e-8c2d-46e2-9ebd-26736f62a2b6"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "d552f7d6-57bb-47ad-979c-97564e175d64",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "860100a6-cb47-4dff-a196-e5b766610db0",
+          "magnet": "circle",
+          "port": "in"
+        },
+        "id": "7f6eedf6-b911-4f03-a03b-ecebfed8b8df"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "2976e8c3-fc46-4b00-aa85-1392317d10ac",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "d552f7d6-57bb-47ad-979c-97564e175d64",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "200db12b-16bd-4446-b709-cdbd912cf673"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "ab8b28e4-3486-4eb5-acf1-0016fa2850ba",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "90bb8e04-54f4-4f23-ac63-486d17e282d0",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "70d92e8c-10eb-4793-af5d-cc522240bd15"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "dfc97fd9-5c19-426c-8c6f-5ee6c9e0c6f3",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "90bb8e04-54f4-4f23-ac63-486d17e282d0",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "e4b5f35b-a1e5-4d86-81b7-a701baff1736"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "90bb8e04-54f4-4f23-ac63-486d17e282d0",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "860100a6-cb47-4dff-a196-e5b766610db0",
+          "magnet": "circle",
+          "port": "in"
+        },
+        "id": "4796965e-517c-4efc-8f48-bfe4314198e8"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "860100a6-cb47-4dff-a196-e5b766610db0",
+          "magnet": "circle",
+          "port": "bot"
+        },
+        "target": {
+          "id": "3c2a268f-b36a-47aa-be71-86e3b4ede1c6",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "id": "51592152-6d69-4b2d-babc-15a0eb805040"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "3c2a268f-b36a-47aa-be71-86e3b4ede1c6",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "target": {
+          "id": "4384d70e-3671-496b-95e4-5d462df5c341",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "37732769-f48c-47e0-a4d9-aa727a85992d"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "1ca190c4-76c4-46ad-a675-8a40ef8e6883",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "ab8b28e4-3486-4eb5-acf1-0016fa2850ba",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "1143c1b4-7414-4747-89d5-fdd1e2be2fdb"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "2c4756cf-2d2e-4ae4-b2fa-22bb422706e5",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "acf61647-7db9-4e88-89f1-0b4231798026",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "3c42e33e-8fca-4fcf-8261-dedc02953bc9"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "opacity": 0,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "acf61647-7db9-4e88-89f1-0b4231798026",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "2976e8c3-fc46-4b00-aa85-1392317d10ac",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "b65f263b-afa9-48fb-a864-d3ec715af41e"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "6d61270c-b7b4-4833-931e-16d4a574cf12",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "31ee23ea-7c98-4f5a-a4f1-8b750ae93985",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "7a4c3a4d-016a-43b6-bfe0-d8685d6ab0ae"
+      },
+      {
+        "type": "s.FlowPipe",
+        "z": -2,
+        "router": {
+          "name": "orthogonal"
+        },
+        "connector": {
+          "name": "rounded",
+          "args": {
+            "radius": 12
+          }
+        },
+        "attrs": {
+          "line": {
+            "class": "wp-flow wp-on",
+            "opacity": 1,
+            "style": {
+              "animationDuration": "0.35s"
+            }
+          }
+        },
+        "source": {
+          "id": "31ee23ea-7c98-4f5a-a4f1-8b750ae93985",
+          "magnet": "circle",
+          "port": "r"
+        },
+        "target": {
+          "id": "1ca190c4-76c4-46ad-a675-8a40ef8e6883",
+          "magnet": "circle",
+          "port": "l"
+        },
+        "id": "6e852158-881b-4c06-8d74-b00d67e344b5"
+      },
+      {
+        "type": "s.Leader",
+        "z": -1,
+        "attrs": {},
+        "source": {
+          "id": "f8939e1b-ec21-4714-acf5-e41557d5f06f",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "target": {
+          "id": "3c2a268f-b36a-47aa-be71-86e3b4ede1c6",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "id": "71970fed-8a48-45ca-8581-76aa4712c92d"
+      },
+      {
+        "type": "s.Leader",
+        "z": -1,
+        "attrs": {},
+        "source": {
+          "id": "43486ab9-c669-4c89-a1b5-88286bcc8ce9",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "target": {
+          "id": "acf61647-7db9-4e88-89f1-0b4231798026",
+          "magnet": "circle",
+          "port": "t"
+        },
+        "id": "97440bf6-6dfc-4323-acea-9e4621eefb46"
+      },
+      {
+        "type": "s.Leader",
+        "z": -1,
+        "attrs": {},
+        "source": {
+          "id": "67ef39fa-0ac5-4aae-b10a-97d642cecffb",
+          "magnet": "circle",
+          "port": "p"
+        },
+        "target": {
+          "id": "31ee23ea-7c98-4f5a-a4f1-8b750ae93985",
+          "magnet": "circle",
+          "port": "t"
+        },
+        "id": "f096f0b7-f6aa-4a46-b62d-5f9a8f012c78"
+      },
+      {
+        "type": "s.Cyl",
+        "size": {
+          "width": 150,
+          "height": 250
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "capBot": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "capTop": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "fill": {
+            "y": 172.069563272711,
+            "height": 41.93043672728897
+          },
+          "markLo": {
+            "y1": 178.4,
+            "y2": 178.4,
+            "stroke": "#f59e0b"
+          },
+          "markHi": {
+            "y1": 89.4,
+            "y2": 89.4,
+            "stroke": "#dc2626"
+          },
+          "name": {
+            "text": "Sump"
+          }
+        },
+        "position": {
+          "x": 20,
+          "y": 270
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "top",
+              "args": {
+                "x": 150,
+                "y": 60
+              }
+            },
+            {
+              "group": "p",
+              "id": "bot",
+              "args": {
+                "x": 150,
+                "y": 205
+              }
+            }
+          ]
+        },
+        "level": 23.556425127690435,
+        "simMin": 20,
+        "simMax": 70,
+        "id": "6635eed8-bb30-49f5-81bd-7fb354caeb84",
+        "z": 1,
+        "metrics": {
+          "level": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Pump",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "attrs": {
+          "ring": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "inner": {
+            "fill": "#5fb98f"
+          },
+          "imp": {
+            "class": "wp-spin"
+          },
+          "name": {
+            "text": "Pump 1"
+          }
+        },
+        "position": {
+          "x": 590,
+          "y": 690
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 46
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 92,
+                "y": 46
+              }
+            }
+          ]
+        },
+        "on": true,
+        "pressure": 2.4196150317187057,
+        "id": "dfc97fd9-5c19-426c-8c6f-5ee6c9e0c6f3",
+        "z": 2,
+        "metrics": {
+          "on": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "runtime": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Pump",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "attrs": {
+          "ring": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "inner": {
+            "fill": "#5fb98f"
+          },
+          "imp": {
+            "class": "wp-spin"
+          },
+          "name": {
+            "text": "Pump 2"
+          }
+        },
+        "position": {
+          "x": 590,
+          "y": 450
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 46
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 92,
+                "y": 46
+              }
+            }
+          ]
+        },
+        "on": true,
+        "pressure": 1.6368806266980456,
+        "id": "ab8b28e4-3486-4eb5-acf1-0016fa2850ba",
+        "z": 3,
+        "metrics": {
+          "on": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "runtime": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Pump",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "attrs": {
+          "ring": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "inner": {
+            "fill": "#5fb98f"
+          },
+          "imp": {
+            "class": "wp-spin"
+          },
+          "name": {
+            "text": "Pump 3"
+          }
+        },
+        "position": {
+          "x": 590,
+          "y": 250
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 46
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 92,
+                "y": 46
+              }
+            }
+          ]
+        },
+        "on": true,
+        "pressure": 3.3434002501292817,
+        "id": "2976e8c3-fc46-4b00-aa85-1392317d10ac",
+        "z": 4,
+        "metrics": {
+          "on": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "runtime": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Pump",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "attrs": {
+          "ring": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "inner": {
+            "fill": "#5fb98f"
+          },
+          "imp": {
+            "class": "wp-spin"
+          },
+          "name": {
+            "text": "Pump 4"
+          }
+        },
+        "position": {
+          "x": 590,
+          "y": 20
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 46
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 92,
+                "y": 46
+              }
+            }
+          ]
+        },
+        "on": true,
+        "pressure": 2.838222492731298,
+        "id": "22600890-7f6c-4d31-a610-aa62aeaa14dd",
+        "z": 5,
+        "metrics": {
+          "on": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "runtime": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Valve",
+        "size": {
+          "width": 76,
+          "height": 92
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "Valve 1"
+          }
+        },
+        "position": {
+          "x": 260,
+          "y": 240
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 8,
+                "y": 66
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 68,
+                "y": 66
+              }
+            }
+          ]
+        },
+        "open": true,
+        "id": "2c4756cf-2d2e-4ae4-b2fa-22bb422706e5",
+        "z": 6,
+        "metrics": {
+          "open": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Hopper",
+        "size": {
+          "width": 170,
+          "height": 230
+        },
+        "attrs": {
+          "cone": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "outlet": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "cyl": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "fill": {
+            "y": 47.663471871265244,
+            "height": 60.336528128734756
+          },
+          "capTop": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "OHT"
+          }
+        },
+        "position": {
+          "x": 1050,
+          "y": 140
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "in",
+              "args": {
+                "x": 0,
+                "y": 62
+              }
+            },
+            {
+              "group": "p",
+              "id": "bot",
+              "args": {
+                "x": 85,
+                "y": 222
+              }
+            }
+          ]
+        },
+        "level": 77.35452324196763,
+        "simMin": 20,
+        "simMax": 95,
+        "id": "860100a6-cb47-4dff-a196-e5b766610db0",
+        "z": 7,
+        "metrics": {
+          "level": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Valve",
+        "size": {
+          "width": 76,
+          "height": 92
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "Valve 3"
+          }
+        },
+        "position": {
+          "x": 1230,
+          "y": 600
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 8,
+                "y": 66
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 68,
+                "y": 66
+              }
+            }
+          ]
+        },
+        "open": true,
+        "id": "4384d70e-3671-496b-95e4-5d462df5c341",
+        "z": 8,
+        "metrics": {
+          "open": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Zone",
+        "size": {
+          "width": 110,
+          "height": 40
+        },
+        "attrs": {
+          "name": {
+            "text": "Zone 1"
+          }
+        },
+        "position": {
+          "x": 40,
+          "y": 670
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 0,
+                "y": 20
+              }
+            }
+          ]
+        },
+        "id": "a77d9124-675e-464e-9380-0749016a6bf1",
+        "z": 9
+      },
+      {
+        "type": "s.Zone",
+        "size": {
+          "width": 110,
+          "height": 40
+        },
+        "attrs": {
+          "name": {
+            "text": "Zone 2"
+          }
+        },
+        "position": {
+          "x": 1370,
+          "y": 770
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 0,
+                "y": 20
+              }
+            }
+          ]
+        },
+        "id": "69b14894-7b3c-4144-b901-07d63c52bed9",
+        "z": 10
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 120,
+          "height": 54
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 1"
+          },
+          "barFill": {
+            "width": 104
+          },
+          "val": {
+            "text": "100% open"
+          }
+        },
+        "position": {
+          "x": 146.6603458737864,
+          "y": 104.6478686286408
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "2c4756cf-2d2e-4ae4-b2fa-22bb422706e5"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "43414d19-9c17-4df0-aa7e-bb807a0827b9",
+        "z": 11,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 120,
+          "height": 54
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 2"
+          },
+          "barFill": {
+            "width": 104
+          },
+          "val": {
+            "text": "100% open"
+          }
+        },
+        "position": {
+          "x": 715.3707145024272,
+          "y": 768.1940230582525
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "dfc97fd9-5c19-426c-8c6f-5ee6c9e0c6f3"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "4de09777-1741-4f34-aac2-03940288fb0d",
+        "z": 12,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 120,
+          "height": 54
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 3"
+          },
+          "barFill": {
+            "width": 104
+          },
+          "val": {
+            "text": "100% open"
+          }
+        },
+        "position": {
+          "x": 686.5691368325242,
+          "y": 537.3435603762135
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "ab8b28e4-3486-4eb5-acf1-0016fa2850ba"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "6eeeb020-5702-4e8f-a796-5478e0256a3a",
+        "z": 13,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 120,
+          "height": 54
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 4"
+          },
+          "barFill": {
+            "width": 104
+          },
+          "val": {
+            "text": "100% open"
+          }
+        },
+        "position": {
+          "x": 693.9693947208739,
+          "y": 325.96423695388347
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "2976e8c3-fc46-4b00-aa85-1392317d10ac"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "e6c3087f-4edf-4341-893a-1b43b728dd8a",
+        "z": 14,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 120,
+          "height": 54
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 5"
+          },
+          "barFill": {
+            "width": 104
+          },
+          "val": {
+            "text": "100% open"
+          }
+        },
+        "position": {
+          "x": 698.0684921116505,
+          "y": 110.29676122572816
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "22600890-7f6c-4d31-a610-aa62aeaa14dd"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "03a3b690-59c9-4bdd-bcec-b4d3a4ad953e",
+        "z": 15,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Quality",
+        "size": {
+          "width": 156,
+          "height": 118
+        },
+        "attrs": {
+          "phV": {
+            "text": "7.31"
+          },
+          "tbV": {
+            "text": "0.92 NTU"
+          },
+          "clV": {
+            "text": "1.30 mg/L"
+          },
+          "doV": {
+            "text": "7.7 mg/L"
+          }
+        },
+        "position": {
+          "x": 50,
+          "y": 760
+        },
+        "angle": 0,
+        "ph": 7.30989323453444,
+        "turb": 0.9150919780132107,
+        "cl": 1.301918080887978,
+        "do": 7.706168194317249,
+        "id": "ef940fcd-2f14-4aad-a139-6808e5744ea3",
+        "z": 18,
+        "metrics": {
+          "ph": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "turbidity": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "chlorine": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "dissolvedOxygen": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 130,
+          "height": 120
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 6"
+          }
+        },
+        "position": {
+          "x": 1161.1948194781553,
+          "y": 728.153822815534
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "4384d70e-3671-496b-95e4-5d462df5c341"
+        ],
+        "showSlider": false,
+        "showOpen": true,
+        "showClose": true,
+        "id": "0e394dd6-ecff-40ea-8953-cfbd73f522f3",
+        "z": 19,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.PG",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "attrs": {
+          "bgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 1 1 73.71150438746159 78.64177772475911"
+          },
+          "fgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 0 1 22.288495612538426 78.64177772475912",
+            "stroke": "#16a34a"
+          },
+          "val": {
+            "text": "0.0"
+          },
+          "name": {
+            "text": "Gauge 3"
+          }
+        },
+        "position": {
+          "x": 430,
+          "y": 100
+        },
+        "angle": 0,
+        "value": 0,
+        "simMin": 0,
+        "simMax": 8,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 48,
+                "y": 96
+              }
+            }
+          ]
+        },
+        "id": "43486ab9-c669-4c89-a1b5-88286bcc8ce9",
+        "z": 21,
+        "metrics": {
+          "value": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Valve",
+        "size": {
+          "width": 76,
+          "height": 92
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "Valve 4"
+          }
+        },
+        "position": {
+          "x": 230,
+          "y": 430
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 8,
+                "y": 66
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 68,
+                "y": 66
+              }
+            }
+          ]
+        },
+        "open": true,
+        "id": "6d61270c-b7b4-4833-931e-16d4a574cf12",
+        "z": 23,
+        "metrics": {
+          "open": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.PG",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "attrs": {
+          "bgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 1 1 73.71150438746159 78.64177772475911"
+          },
+          "fgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 0 1 32.382971385058504 11.174622646331258",
+            "stroke": "#16a34a"
+          },
+          "val": {
+            "text": "3.3"
+          },
+          "name": {
+            "text": "Gauge 4"
+          }
+        },
+        "position": {
+          "x": 360,
+          "y": 580
+        },
+        "angle": 0,
+        "value": 3.3434002501292817,
+        "simMin": 0,
+        "simMax": 8,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 48,
+                "y": 96
+              }
+            }
+          ]
+        },
+        "id": "67ef39fa-0ac5-4aae-b10a-97d642cecffb",
+        "z": 24,
+        "metrics": {
+          "value": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Valve",
+        "size": {
+          "width": 76,
+          "height": 92
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "Valve 5"
+          }
+        },
+        "position": {
+          "x": 890,
+          "y": 40
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 8,
+                "y": 66
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 68,
+                "y": 66
+              }
+            }
+          ]
+        },
+        "open": true,
+        "id": "d552f7d6-57bb-47ad-979c-97564e175d64",
+        "z": 25,
+        "metrics": {
+          "open": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Valve",
+        "size": {
+          "width": 76,
+          "height": 92
+        },
+        "attrs": {
+          "body": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "name": {
+            "text": "Valve 6"
+          }
+        },
+        "position": {
+          "x": 910,
+          "y": 450
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 8,
+                "y": 66
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 68,
+                "y": 66
+              }
+            }
+          ]
+        },
+        "open": true,
+        "id": "90bb8e04-54f4-4f23-ac63-486d17e282d0",
+        "z": 26,
+        "metrics": {
+          "open": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 130,
+          "height": 120
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 7"
+          }
+        },
+        "position": {
+          "x": 197.76604217233006,
+          "y": 548.1392217839806
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "6d61270c-b7b4-4833-931e-16d4a574cf12"
+        ],
+        "showSlider": true,
+        "showOpen": true,
+        "showClose": true,
+        "id": "fa1026a7-3e3c-4f63-8e78-fa08da4eb063",
+        "z": 27,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 130,
+          "height": 120
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 8"
+          }
+        },
+        "position": {
+          "x": 950.1114987864079,
+          "y": 569.6357327063106
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "90bb8e04-54f4-4f23-ac63-486d17e282d0"
+        ],
+        "showSlider": false,
+        "showOpen": true,
+        "showClose": true,
+        "id": "c49d99ab-95d0-473b-ab28-923a82f274f5",
+        "z": 28,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Control",
+        "size": {
+          "width": 130,
+          "height": 120
+        },
+        "attrs": {
+          "name": {
+            "text": "Control 9"
+          }
+        },
+        "position": {
+          "x": 978.7298998786409,
+          "y": 23.17733616504853
+        },
+        "angle": 0,
+        "pct": 100,
+        "targets": [
+          "d552f7d6-57bb-47ad-979c-97564e175d64"
+        ],
+        "showSlider": false,
+        "showOpen": true,
+        "showClose": true,
+        "id": "42be1677-fc52-47ac-bdbd-62e54125c45f",
+        "z": 29,
+        "metrics": {
+          "pct": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Tap",
+        "size": {
+          "width": 84,
+          "height": 48
+        },
+        "attrs": {
+          "flL": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pipe": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "flR": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "head": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pVal": {
+            "text": "3.3"
+          },
+          "val": {
+            "text": "3.3 bar"
+          }
+        },
+        "position": {
+          "x": 1200,
+          "y": 390
+        },
+        "angle": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 84,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "t",
+              "args": {
+                "x": 42,
+                "y": 1
+              }
+            },
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 42,
+                "y": 24
+              }
+            }
+          ]
+        },
+        "id": "3c2a268f-b36a-47aa-be71-86e3b4ede1c6",
+        "z": 30,
+        "pressure": 3.3434002501292817,
+        "metrics": {
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.PG",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "attrs": {
+          "bgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 1 1 73.71150438746159 78.64177772475911"
+          },
+          "fgArc": {
+            "d": "M 22.288495612538426 78.64177772475912 A 40 40 0 0 1 32.382971385058504 11.174622646331258",
+            "stroke": "#16a34a"
+          },
+          "val": {
+            "text": "3.3"
+          },
+          "name": {
+            "text": "Gauge 5"
+          }
+        },
+        "position": {
+          "x": 1270,
+          "y": 200
+        },
+        "angle": 0,
+        "value": 3.3434002501292817,
+        "simMin": 0,
+        "simMax": 8,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "p",
+              "args": {
+                "x": 48,
+                "y": 96
+              }
+            }
+          ]
+        },
+        "id": "f8939e1b-ec21-4714-acf5-e41557d5f06f",
+        "z": 31,
+        "metrics": {
+          "value": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Flow",
+        "size": {
+          "width": 84,
+          "height": 48
+        },
+        "attrs": {
+          "flL": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pipe": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "flR": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "head": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "rotor": {
+            "class": "wp-spin"
+          },
+          "val": {
+            "text": "401 m³/h"
+          }
+        },
+        "position": {
+          "x": 420,
+          "y": 460
+        },
+        "angle": 0,
+        "flow": 401,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 84,
+                "y": 24
+              }
+            }
+          ]
+        },
+        "id": "1ca190c4-76c4-46ad-a675-8a40ef8e6883",
+        "z": 32,
+        "metrics": {
+          "flow": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          },
+          "total": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Tap",
+        "size": {
+          "width": 84,
+          "height": 48
+        },
+        "attrs": {
+          "flL": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pipe": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "flR": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "head": {
+            "fill": {
+              "attrs": {}
+            }
+          }
+        },
+        "position": {
+          "x": 370,
+          "y": 290
+        },
+        "angle": 0,
+        "pressure": 0,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 84,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "t",
+              "args": {
+                "x": 42,
+                "y": 1
+              }
+            }
+          ]
+        },
+        "id": "acf61647-7db9-4e88-89f1-0b4231798026",
+        "z": 33,
+        "metrics": {
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      },
+      {
+        "type": "s.Tap",
+        "size": {
+          "width": 84,
+          "height": 48
+        },
+        "attrs": {
+          "flL": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pipe": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "flR": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "head": {
+            "fill": {
+              "attrs": {}
+            }
+          },
+          "pVal": {
+            "text": "3.3"
+          },
+          "val": {
+            "text": "3.3 bar"
+          }
+        },
+        "position": {
+          "x": 330,
+          "y": 390
+        },
+        "angle": 0,
+        "pressure": 3.3434002501292817,
+        "ports": {
+          "groups": {
+            "p": {
+              "position": {
+                "name": "absolute"
+              },
+              "attrs": {
+                "circle": {
+                  "r": 7,
+                  "fill": "#cfd6de",
+                  "stroke": "#8a929c",
+                  "strokeWidth": 1.5,
+                  "magnet": true
+                }
+              },
+              "markup": [
+                {
+                  "namespaceURI": "http://www.w3.org/2000/svg",
+                  "tagName": "circle",
+                  "style": {},
+                  "selector": "circle"
+                }
+              ]
+            }
+          },
+          "items": [
+            {
+              "group": "p",
+              "id": "l",
+              "args": {
+                "x": 0,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "r",
+              "args": {
+                "x": 84,
+                "y": 24
+              }
+            },
+            {
+              "group": "p",
+              "id": "t",
+              "args": {
+                "x": 42,
+                "y": 1
+              }
+            }
+          ]
+        },
+        "id": "31ee23ea-7c98-4f5a-a4f1-8b750ae93985",
+        "z": 34,
+        "metrics": {
+          "pressure": {
+            "panelId": null,
+            "derId": null,
+            "paramId": null,
+            "value": null
+          }
+        }
+      }
+    ]
+  }
+}
