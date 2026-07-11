@@ -33,6 +33,11 @@ syntax.
 Light theme, consistent with rest of app — no dark/neon reference styling.
 Badge uses existing CSS vars (`--teal`, `--panel`, `--line`, `--txt`).
 
+Claymorphism treatment on the card and badge: soft dual-tone shadows (light
+highlight + soft dark shadow, no hard 1px borders), larger border-radius,
+subtle inset highlight for a puffy 3D look. Applied via `box-shadow`/
+`border-radius` only — no new color vars, same `--panel`/`--teal` palette.
+
 ## Component: animated badge
 
 Sits above the existing "Sign in" button in `.login-card`. Inline SVG,

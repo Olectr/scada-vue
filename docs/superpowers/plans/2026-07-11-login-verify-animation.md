@@ -14,6 +14,7 @@
 - Light theme, existing CSS vars only (`--teal`, `--panel`, `--line`, `--txt`) — no dark/neon reference styling.
 - `login()` must be called immediately on click, with no artificial delay blocking it.
 - No changes to `useAuth.js`, `router/`, or `auth/oidc.js` — OIDC flow itself is untouched.
+- Card and badge use claymorphism: soft dual-tone `box-shadow` (light highlight + soft dark shadow, no hard 1px borders), larger `border-radius`, subtle inset highlight. Same `--panel`/`--teal` palette — no new color vars.
 - `motion-v` transition durations/delays are in **seconds**, not milliseconds (confirmed against library docs) — do not mix up with the `setTimeout(..., 300)` millisecond value used for the JS state transition.
 - Repo has no test framework (`package.json` has no `test` script, no vitest/jest, no `*.spec.*` files) — verification is manual via `npm run dev`, per the existing [Zitadel spec](../specs/2026-07-07-zitadel-login-design.md)'s own manual-testing approach. No automated test steps in this plan.
 
@@ -177,17 +178,32 @@ function handleSignIn() {
 }
 .login-card {
   text-align: center; padding: 40px 56px; background: var(--panel);
-  border: 1px solid var(--line); box-shadow: var(--shadow);
+  border: none; border-radius: 32px;
+  box-shadow:
+    10px 10px 20px rgba(16, 40, 60, 0.10),
+    -10px -10px 20px rgba(255, 255, 255, 0.75),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.4);
 }
 .badge-ring {
   position: relative;
   width: 72px; height: 72px;
   margin: 0 auto 20px;
   border-radius: 50%;
-  border: 2px solid var(--teal);
+  background: var(--panel);
+  box-shadow:
+    6px 6px 12px rgba(16, 40, 60, 0.12),
+    -6px -6px 12px rgba(255, 255, 255, 0.8),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.6),
+    inset 2px 2px 4px rgba(16, 40, 60, 0.06);
   display: flex; align-items: center; justify-content: center;
 }
-.badge-ring.verified { background: rgba(13, 148, 136, 0.08); }
+.badge-ring.verified {
+  box-shadow:
+    6px 6px 12px rgba(13, 148, 136, 0.18),
+    -6px -6px 12px rgba(255, 255, 255, 0.8),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.6),
+    inset 2px 2px 4px rgba(13, 148, 136, 0.08);
+}
 .badge-icon {
   position: absolute;
   inset: 0;
@@ -199,11 +215,15 @@ function handleSignIn() {
 .login-card small { color: var(--muted); letter-spacing: 2px; font-size: 10px; }
 .error { color: var(--red); margin: 16px 0 0; font-size: 12px; }
 .signin-btn {
-  margin-top: 24px; padding: 10px 32px; border: none; background: var(--teal);
-  color: #fff; font-weight: 700; font-size: 13px; letter-spacing: .5px; cursor: pointer;
+  margin-top: 24px; padding: 10px 32px; border: none; border-radius: 20px;
+  background: var(--teal); color: #fff; font-weight: 700; font-size: 13px;
+  letter-spacing: .5px; cursor: pointer;
+  box-shadow:
+    4px 4px 10px rgba(13, 148, 136, 0.35),
+    -2px -2px 6px rgba(255, 255, 255, 0.3);
 }
 .signin-btn:hover { background: var(--teal-dim); }
-.signin-btn:disabled { opacity: 0.7; cursor: default; }
+.signin-btn:disabled { opacity: 0.7; cursor: default; box-shadow: none; }
 </style>
 ```
 
