@@ -14,17 +14,19 @@ feedback layered on top of that click, not a new auth mechanism.
 ## Scope
 
 - `src/views/LoginView.vue` — add animated badge + state machine.
-- `src/main.js` — register `MotionPlugin`.
-- `package.json` — add `@vueuse/motion` dependency.
+- `package.json` — add `motion-v` dependency.
 
 No changes to `useAuth.js`, `router/`, `auth/oidc.js`, or the Zitadel app
 config — the OIDC flow itself is untouched.
 
 ## Dependency
 
-`@vueuse/motion` — Vue 3 directive-based motion library (`v-motion`,
-`useMotion`). Chosen over `motion-v` for smaller footprint and directive
-ergonomics; sufficient for spring/variant transitions needed here.
+`motion-v` — official Motion (ex-Framer Motion) Vue port. Component-based
+API (`<motion.div :animate :transition>`), no Vue plugin registration
+needed for a plain Vite app. Switched from the originally-considered
+`@vueuse/motion` for closer parity with the reference mockup's
+framer-motion source and more confidently-documented variant-switching
+syntax.
 
 ## Visual Style
 
@@ -42,8 +44,8 @@ Sits above the existing "Sign in" button in `.login-card`. Inline SVG,
 
 ## State Machine
 
-`ref` `state = 'idle' | 'verifying' | 'verified'`, driven by `useMotion`
-variants bound via `v-motion="state"`:
+`ref` `state = 'idle' | 'verifying' | 'verified'`, driven by computed
+`animate`/`transition` targets bound to `<motion.div>` elements:
 
 | State | Ring | Icon | Button |
 |---|---|---|---|
@@ -85,5 +87,5 @@ behavior.
 3. Throttle network heavily (or block `auth.mpstech.in` briefly) → confirm
    badge reaches `verified` (checkmark) state ~300ms after click, without
    blocking the pending redirect.
-4. Confirm no console errors from `@vueuse/motion` on mount/unmount
+4. Confirm no console errors from `motion-v` on mount/unmount
    (navigating away mid-animation).
