@@ -1120,12 +1120,13 @@ onUnmounted(() => {
   --shadow-inset: inset 2px 2px 5px rgba(0,0,0,.35), inset -1px -1px 3px rgba(255,255,255,.02);
   --shadow-sm: 3px 3px 8px rgba(0,0,0,.35), -2px -2px 6px rgba(255,255,255,.02);
 }
-.toolbar { display: flex; align-items: center; gap: 6px; background: var(--bar); border-radius: var(--r-lg); padding: 6px 10px; margin-bottom: 8px; font-size: 13px; color: var(--text); box-shadow: var(--shadow-raised); }
+.toolbar { display: flex; align-items: center; gap: 6px; background: var(--surface-elevated); border-radius: var(--r-lg); padding: 6px 10px; margin-bottom: 8px; font-size: 13px; color: var(--text); box-shadow: var(--shadow-raised); }
 .toolbar > strong { font-weight: 700; letter-spacing: .01em; margin-right: 2px; }
 .toolbar .sp { flex: 1; }
 .tgroup { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--border); }
 .modeswitch { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-md); padding: 2px; box-shadow: var(--shadow-inset); }
 .modeswitch button { border: none; background: transparent; }
+.toolbar .modeswitch button { background: transparent; box-shadow: none; }
 .modeswitch button.on { background: var(--surface); border-radius: var(--r-sm); box-shadow: var(--shadow-sm); }
 .toolbar button, .palette button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: var(--r-md); padding: 6px 9px; background: var(--surface); color: var(--muted); cursor: pointer; box-shadow: var(--shadow-sm); transition: background .15s ease, color .15s ease, box-shadow .15s ease; }
 .toolbar button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
