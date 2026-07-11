@@ -1109,16 +1109,16 @@ onUnmounted(() => {
   --surface: #ffffff; --surface-2: #f8fafc; --surface-elevated: #ffffff; --bar: #f8fafc; --border: #e7ebf0;
   --text: #0f172a; --muted: #64748b; --accent: #4f46e5; --accent-soft: rgba(79,70,229,.12);
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
-  --shadow-raised: 4px 4px 10px rgba(15,23,42,.10), -4px -4px 10px rgba(255,255,255,.85);
-  --shadow-inset: inset 2px 2px 5px rgba(15,23,42,.08), inset -2px -2px 5px rgba(255,255,255,.7);
-  --shadow-sm: 2px 2px 6px rgba(15,23,42,.08), -2px -2px 6px rgba(255,255,255,.7);
+  --shadow-raised: 8px 8px 20px rgba(15,23,42,.18), -8px -8px 20px rgba(255,255,255,.95);
+  --shadow-inset: inset 4px 4px 8px rgba(15,23,42,.14), inset -4px -4px 8px rgba(255,255,255,.8);
+  --shadow-sm: 5px 5px 12px rgba(15,23,42,.14), -5px -5px 12px rgba(255,255,255,.9);
   width: 100%; height: 100%; display: flex; flex-direction: column; color: var(--text);
 }
 .builder.dark {
   --surface: #111827; --surface-2: #0b1220; --surface-elevated: #1e293b; --bar: #0f172a; --border: #283449; --text: #e5e7eb; --muted: #94a3b8;
-  --shadow-raised: 5px 5px 12px rgba(0,0,0,.4), -3px -3px 10px rgba(255,255,255,.03);
-  --shadow-inset: inset 2px 2px 5px rgba(0,0,0,.35), inset -1px -1px 3px rgba(255,255,255,.02);
-  --shadow-sm: 3px 3px 8px rgba(0,0,0,.35), -2px -2px 6px rgba(255,255,255,.02);
+  --shadow-raised: 10px 10px 24px rgba(0,0,0,.55), -6px -6px 18px rgba(255,255,255,.05);
+  --shadow-inset: inset 4px 4px 8px rgba(0,0,0,.45), inset -3px -3px 6px rgba(255,255,255,.04);
+  --shadow-sm: 6px 6px 14px rgba(0,0,0,.5), -4px -4px 12px rgba(255,255,255,.04);
 }
 .toolbar { display: flex; align-items: center; gap: 6px; background: var(--surface-elevated); border-radius: var(--r-lg); padding: 6px 10px; margin-bottom: 8px; font-size: 13px; color: var(--text); box-shadow: var(--shadow-raised); }
 .toolbar > strong { font-weight: 700; letter-spacing: .01em; margin-right: 2px; }
