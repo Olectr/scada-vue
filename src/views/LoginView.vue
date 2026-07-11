@@ -33,7 +33,7 @@ const checkAnimate = computed(() => (
 
 function handleSignIn() {
   state.value = 'verifying'
-  login()
+  login().catch(() => { state.value = 'idle' })
   setTimeout(() => { state.value = 'verified' }, 300)
 }
 </script>
@@ -46,7 +46,7 @@ function handleSignIn() {
           <Lock :size="32" />
         </motion.div>
         <motion.div
-          class="badge-icon badge-icon-check"
+          class="badge-icon"
           :animate="checkAnimate"
           :transition="{ duration: 0.25, delay: 0.15 }"
         >
