@@ -18,10 +18,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--txt);height:100vh;
 #app{height:100vh}
 .app{display:grid;grid-template-columns:230px 1fr;grid-template-rows:56px 1fr;height:100vh}
 
-/* Top bar (claymorphism: soft dual-tone shadow instead of hard border) */
+/* Top bar (flat: hard border, no shadow) */
 .topbar{grid-column:1/3;background:#fff;
   display:flex;align-items:center;justify-content:space-between;padding:0 18px;
-  box-shadow:0 6px 16px rgba(16,40,60,.08),0 1px 0 rgba(255,255,255,.6) inset;
+  border-bottom:1px solid var(--line);
   position:relative;z-index:2}
 .topbar h1{font-size:13px;letter-spacing:2px;font-weight:600;color:var(--txt);text-transform:uppercase}
 .topbar .right{display:flex;align-items:center;gap:18px}
@@ -30,18 +30,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--txt);height:100vh;
 .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite}
 @keyframes pulse{50%{opacity:.4}}
 
-/* Sidebar (claymorphism: soft dual-tone shadow instead of hard border) */
+/* Sidebar (flat: hard border, no shadow) */
 .side{background:#fff;display:flex;flex-direction:column;padding:14px 0;
-  box-shadow:6px 0 16px rgba(16,40,60,.08)}
-.logo{display:flex;align-items:center;justify-content:center;padding:14px 18px 20px;margin-bottom:10px}
+  border-right:1px solid var(--line)}
+.logo{display:flex;align-items:center;justify-content:center;padding:14px 18px 20px;margin-bottom:10px;
+  border-bottom:1px solid var(--line)}
 .logo-img{width:120px;height:auto;display:block}
 .nav{flex:1;overflow:auto;padding:0 10px}
 .nav a{display:flex;align-items:center;gap:11px;padding:11px 16px;font-size:13px;color:var(--muted);
-  cursor:pointer;border-radius:14px;text-decoration:none;transition:.15s;margin-bottom:4px}
+  cursor:pointer;border-radius:0;border-left:3px solid transparent;text-decoration:none;transition:.15s;margin-bottom:4px}
 .nav a:hover{background:var(--soft);color:var(--txt)}
-.nav a.active{background:var(--panel);color:var(--teal);font-weight:600;
-  box-shadow:4px 4px 10px rgba(16,40,60,.10),-4px -4px 10px rgba(255,255,255,.8),
-    inset 1px 1px 2px rgba(255,255,255,.6)}
+.nav a.active{background:var(--soft);color:var(--teal);font-weight:600;border-left-color:var(--teal)}
 .nav a .ico{width:18px;text-align:center;font-size:14px}
 .side .foot{padding:12px 18px;font-size:9px;color:#a9b8c4;letter-spacing:1px}
 
@@ -56,8 +55,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--txt);height:100vh;
 
 /* ---------- hamburger + drawer backdrop (hidden on desktop) ---------- */
 .burger{display:none;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;
-  margin-right:12px;border-radius:12px;background:#fff;cursor:pointer;padding:0 7px;
-  box-shadow:3px 3px 8px rgba(16,40,60,.10),-3px -3px 8px rgba(255,255,255,.8)}
+  margin-right:12px;border-radius:0;background:#fff;cursor:pointer;padding:0 7px;
+  border:1px solid var(--line)}
 .burger span{display:block;height:2px;width:100%;background:var(--txt);border-radius:2px;transition:.25s}
 .burger.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
 .burger.open span:nth-child(2){opacity:0}
