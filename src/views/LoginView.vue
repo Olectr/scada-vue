@@ -34,7 +34,7 @@ const checkAnimate = computed(() => (
 function handleSignIn() {
   state.value = 'verifying'
   login().catch(() => { state.value = 'idle' })
-  setTimeout(() => { state.value = 'verified' }, 300)
+  setTimeout(() => { if (state.value === 'verifying') state.value = 'verified' }, 300)
 }
 </script>
 
