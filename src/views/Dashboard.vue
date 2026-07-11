@@ -3,37 +3,15 @@
 import { ref, computed } from 'vue'
 import { usePlantData } from '../composables/usePlantData'
 import { useAuth } from '../composables/useAuth'
-import KpiOverview from './KpiOverview.vue'
-import WaterTreatment from './WaterTreatment.vue'
-import SolarPlant from './SolarPlant.vue'
-import PowerDistribution from './PowerDistribution.vue'
-import BoilerTurbine from './BoilerTurbine.vue'
-import ManufacturingLine from './ManufacturingLine.vue'
-import TagMonitor from './TagMonitor.vue'
-import HvacBms from './HvacBms.vue'
-import CompressedAir from './CompressedAir.vue'
-import WindPower from './WindPower.vue'
-import TankFarm from './TankFarm.vue'
 import ScadaBuilder from './ScadaBuilder.vue'
 
 const { state } = usePlantData()
 const { user, logout } = useAuth()
 
 const screens = [
-  { id: 'kpi', ico: '▦', label: 'KPI Overview', title: 'Plant Overview — KPI Dashboard', comp: KpiOverview },
-  { id: 'water', ico: '💧', label: 'Water Treatment', title: 'Water Treatment System', comp: WaterTreatment },
-  { id: 'solar', ico: '☀', label: 'Solar Plant', title: 'Solar Power Plant', comp: SolarPlant },
-  { id: 'power', ico: '⚡', label: 'Power Distribution', title: 'Power Distribution', comp: PowerDistribution },
-  { id: 'boiler', ico: '🔥', label: 'Boiler & Turbine', title: 'Boiler & Turbine HMI', comp: BoilerTurbine },
-  { id: 'mfg', ico: '⚙', label: 'Manufacturing Line', title: 'Manufacturing Line', comp: ManufacturingLine },
-  { id: 'tags', ico: '🏷', label: 'Tag Monitor', title: 'MQTT / OPC UA Tag Monitor', comp: TagMonitor },
-  { id: 'hvac', ico: '❄', label: 'HVAC / BMS', title: 'HVAC / Building Management', comp: HvacBms },
-  { id: 'air', ico: '💨', label: 'Compressed Air', title: 'Compressed Air System', comp: CompressedAir },
-  { id: 'wind', ico: '🌬', label: 'Wind Power', title: 'Wind Power Plant', comp: WindPower },
-  { id: 'farm', ico: '🛢', label: 'Tank Farm', title: 'Tank Farm / Storage', comp: TankFarm },
   { id: 'builder', ico: '✚', label: 'SCADA Builder', title: 'SCADA Builder', comp: ScadaBuilder },
 ]
-const active = ref('kpi')
+const active = ref('builder')
 const current = computed(() => screens.find(s => s.id === active.value))
 const drawer = ref(false)
 function go(id) { active.value = id; drawer.value = false }
@@ -61,10 +39,7 @@ function go(id) { active.value = id; drawer.value = false }
 
     <aside class="side" :class="{ open: drawer }">
       <div class="logo">
-        <div>
-          <div class="mark">SC<b>A</b>DA</div>
-          <small>AUTOMATION</small>
-        </div>
+        <img class="logo-img" src="/olectr-logo.png" alt="Olectr" />
       </div>
       <nav class="nav">
         <a v-for="s in screens" :key="s.id" :class="{ active: active === s.id }" @click="go(s.id)">
