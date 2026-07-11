@@ -102,10 +102,11 @@ decompositions of `--teal`/the `--shadow` token's base color
 unreferenced by `ScadaBuilder.vue`): `.scr-head` and its children, `.grid`,
 `.card` and its children, `.kpi` and its children, `.gauge*`, `.tank*`,
 `.pills`/`.pill`/`.st.*`, `.spin*`, `.stat-row`/`.mini`, `.led*`,
-`.alarms`/`.alarm`, `.flow`/`.node`/`.arrow`, `.scrollbox`, the `table`/
+`.alarms`/`.alarm`, `.flow`/`.node`/`.arrow`, `.scrollbox`, `.chart-box`
+(Chart.js container, confirmed unused by `ScadaBuilder.vue`), the `table`/
 `th`/`td` rules, `.mono`. Also the responsive-media-query lines that target
-these selectors (`.grid{grid-template-columns...}` overrides inside
-`@media` blocks).
+these selectors (`.grid{grid-template-columns...}`, `.stat-row{...}`,
+`.chart-box{...}` overrides inside `@media` blocks).
 
 **Kept:** `.main` (layout container, still used), `.fade-enter-active`/
 `.fade-enter-from` (still used by `Dashboard.vue`'s `<Transition>`),
