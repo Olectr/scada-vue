@@ -8,24 +8,16 @@ import ScadaBuilder from './ScadaBuilder.vue'
 const { state } = usePlantData()
 const { user, logout } = useAuth()
 
-const screens = [
-  { id: 'builder', ico: '✚', label: 'SCADA Builder', title: 'SCADA Builder', comp: ScadaBuilder },
-]
-const active = ref('builder')
-const current = computed(() => screens.find(s => s.id === active.value))
-const drawer = ref(false)
-function go(id) { active.value = id; drawer.value = false }
+const active = 'builder'
+const year = new Date().getFullYear()
+const version = 'v1.0.0'
 </script>
 
 <template>
   <div class="app">
     <header class="topbar">
-      <button class="burger" :class="{ open: drawer }" @click="drawer = !drawer" aria-label="Toggle menu">
-        <span></span><span></span><span></span>
-      </button>
       <img class="topbar-logo" src="/olectr-logo.png" alt="Olectr" />
       <div class="right">
-        <div class="conn"><span class="dot"></span> {{ state.broker }}</div>
         <div class="conn">Date <b style="color:var(--txt)">23/06/2026</b></div>
         <div class="clock">{{ state.clock }}</div>
         <div class="user-box" v-if="user">
@@ -35,23 +27,13 @@ function go(id) { active.value = id; drawer.value = false }
       </div>
     </header>
 
-    <div class="backdrop" :class="{ show: drawer }" @click="drawer = false"></div>
-
-    <aside class="side" :class="{ open: drawer }">
-      
-      <nav class="nav">
-        <a v-for="s in screens" :key="s.id" :class="{ active: active === s.id }" @click="go(s.id)">
-          <span class="ico">{{ s.ico }}</span> {{ s.label }}
-        </a>
-      </nav>
-      <div class="foot">SCADA AUTOMATION · v1.0<br>OPC UA + MQTT</div>
-    </aside>
-
     <main class="main">
       <Transition name="fade" mode="out-in">
-        <component :is="current.comp" :key="active" />
+        <ScadaBuilder :key="active" />
       </Transition>
     </main>
+
+    <footer class="footer">© {{ year }} Olectr · {{ version }}</footer>
   </div>
 </template>
 

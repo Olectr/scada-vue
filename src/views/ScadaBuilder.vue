@@ -91,6 +91,12 @@ async function loadTemplate(kind) {
   currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
 }
 
+// metric keys each shape type exposes — used to backfill metrics on cells from older exports
+const METRIC_KEYS_BY_TYPE = {
+  's.Cyl': ['level'], 's.Hopper': ['level'], 's.Pump': ['on', 'pressure', 'runtime'],
+  's.Valve': ['open'], 's.PG': ['value'], 's.Control': ['pct'], 's.Tap': ['pressure'],
+  's.Flow': ['flow', 'total'], 's.Quality': ['ph', 'turbidity', 'chlorine', 'dissolvedOxygen'],
+}
 // upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
 function migrateCells() {
   if (!graph) return
@@ -107,6 +113,21 @@ function migrateCells() {
       }
       renderCustom(e) // re-apply shape/icon/colors after load
     }
+    // backfill metrics: add the panel/DER/param/value linkage for any expected key missing
+    // it entirely (older exports had no metrics object at all), and add a null value
+    // placeholder to any metric that predates the value field.
+    const expectedKeys = e.get('type') === 's.Custom'
+      ? (CUSTOM_BEHAVIOR_METRIC_KEYS[e.get('behavior') || 'static'] || [])
+      : (METRIC_KEYS_BY_TYPE[e.get('type')] || [])
+    if (expectedKeys.length) {
+      const metrics = { ...(e.get('metrics') || {}) }
+      let changed = false
+      for (const key of expectedKeys) {
+        if (!metrics[key]) { metrics[key] = { panelId: null, derId: null, paramId: null, value: null }; changed = true }
+        else if (!('value' in metrics[key])) { metrics[key] = { ...metrics[key], value: null }; changed = true }
+      }
+      if (changed) e.set('metrics', metrics)
+    }
   })
 }
 
@@ -122,7 +143,9 @@ function reseedCounters() {
 const fileInput = ref(null)
 function exportJson() {
   if (!graph) return
-  const env = { app: 'scada-builder', version: 1, name: currentName.value || 'scada', graph: graph.toJSON() }
+  const raw = graph.toJSON()
+  const graphJson = { ...raw, cells: raw.cells.map(stripMetricDuplicates) }
+  const env = { app: 'scada-builder', version: 1, name: currentName.value || 'scada', graph: graphJson }
   const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -176,6 +199,26 @@ function defaultMetrics(keys) {
   const m = {}
   for (const k of keys) m[k] = { panelId: null, derId: null, paramId: null, value: null }
   return m
+}
+// a metric's cell-level field doesn't always share its metric key name
+// (s.Quality uses short internal names) — map metric key -> cell field name
+const QUALITY_METRIC_FIELD = { ph: 'ph', turbidity: 'turb', chlorine: 'cl', dissolvedOxygen: 'do' }
+// export-time cleanup: metrics carries the panel/DER/param linkage now, so
+// drop the cell's own flat field duplicating metrics.<key>.value (the value
+// filled in later via API stays as a null placeholder in metrics). Live app
+// state (localStorage save/load, in-canvas simulation/rendering) is
+// untouched; this only reshapes what "Export JSON" writes to disk.
+function stripMetricDuplicates(cell) {
+  if (!cell.metrics) return cell
+  const clean = { ...cell }
+  const metrics = {}
+  for (const key in cell.metrics) {
+    metrics[key] = { ...cell.metrics[key], value: null }
+    const fieldName = cell.type === 's.Quality' ? (QUALITY_METRIC_FIELD[key] || key) : key
+    delete clean[fieldName]
+  }
+  clean.metrics = metrics
+  return clean
 }
 
 function makeEl(type) {
@@ -861,7 +904,7 @@ onUnmounted(() => {
         <div class="ptitle" style="margin-top:14px">My Components</div>
         <div v-for="c in customComps" :key="c.id" class="customrow">
           <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
-          <button class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="14" /></button>
+          <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
         </div>
         <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm"><Plus :size="15" /> New component</button>
         <div class="liblinks">
@@ -1258,7 +1301,7 @@ onUnmounted(() => {
 /* custom components + AI + dialogs */
 .customrow { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .customrow .ccadd { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; }
-.customrow .ccdel { color: #ef4444; font-weight: 700; padding: 5px 8px; }
+.customrow .ccdel { color: #ef4444; cursor: pointer; font-weight: 700; padding: 4px 6px; }
 .newcomp { width: 100%; border-style: dashed !important; color: #6366f1 !important; }
 .dlg { background: var(--surface-elevated); border-radius: var(--r-lg); width: min(420px, 92vw); box-shadow: var(--shadow-modal); overflow: hidden; animation: modalpop .26s cubic-bezier(.32,.72,0,1); }
 .dlgbody { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
