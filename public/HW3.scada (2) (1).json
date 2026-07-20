@@ -845,7 +845,6 @@
             }
           ]
         },
-        "on": true,
         "pressure": 2.4196150317187057,
         "id": "dfc97fd9-5c19-426c-8c6f-5ee6c9e0c6f3",
         "z": 2,
@@ -854,7 +853,11 @@
             "panelId": null,
             "derId": null,
             "paramId": null,
-            "value": null
+            "value": null,
+            "stateMapping": {
+              "operator": ">",
+              "compareValue": 0
+            }
           },
           "pressure": {
             "panelId": null,
@@ -941,7 +944,6 @@
             }
           ]
         },
-        "on": true,
         "pressure": 1.6368806266980456,
         "id": "ab8b28e4-3486-4eb5-acf1-0016fa2850ba",
         "z": 3,
@@ -950,7 +952,11 @@
             "panelId": null,
             "derId": null,
             "paramId": null,
-            "value": null
+            "value": null,
+            "stateMapping": {
+              "operator": ">",
+              "compareValue": 0
+            }
           },
           "pressure": {
             "panelId": null,
@@ -1037,7 +1043,6 @@
             }
           ]
         },
-        "on": true,
         "pressure": 3.3434002501292817,
         "id": "2976e8c3-fc46-4b00-aa85-1392317d10ac",
         "z": 4,
@@ -1046,7 +1051,11 @@
             "panelId": null,
             "derId": null,
             "paramId": null,
-            "value": null
+            "value": null,
+            "stateMapping": {
+              "operator": ">",
+              "compareValue": 0
+            }
           },
           "pressure": {
             "panelId": null,
@@ -1133,7 +1142,6 @@
             }
           ]
         },
-        "on": true,
         "pressure": 2.838222492731298,
         "id": "22600890-7f6c-4d31-a610-aa62aeaa14dd",
         "z": 5,
@@ -1142,7 +1150,11 @@
             "panelId": null,
             "derId": null,
             "paramId": null,
-            "value": null
+            "value": null,
+            "stateMapping": {
+              "operator": ">",
+              "compareValue": 0
+            }
           },
           "pressure": {
             "panelId": null,
