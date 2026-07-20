@@ -1,11 +1,12 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
-import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight } from 'lucide-vue-next'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
+const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
 
 const host = ref(null)
 const fitEl = ref(null)
@@ -188,6 +189,7 @@ const palette = [
   { type: 'quality', label: 'Water Quality', ico: '🧪' },
   { type: 'chart', label: 'Chart', ico: '📈' },
   { type: 'note', label: 'Label', ico: '📝' },
+  ...INSTRUMENT_DEFS.map(def => ({ type: 'instrument', key: def.key, label: def.label, icon: INSTRUMENT_PALETTE_ICON[def.key] })),
 ]
 
 const counters = reactive({})
@@ -221,7 +223,7 @@ function stripMetricDuplicates(cell) {
   return clean
 }
 
-function makeEl(type) {
+function makeEl(type, key) {
   const x = STAGE_W / 2 - 75, y = STAGE_H / 2 - 100
   switch (type) {
     case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) }); setTankMarks(tk); return tk }
@@ -236,10 +238,13 @@ function makeEl(type) {
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
     case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } } })
+    case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } } }) }
   }
 }
-function addComponent(type) {
-  const el = makeEl(type); if (!el) return
+function addComponent(item) {
+  const type = typeof item === 'string' ? item : item.type
+  const key = typeof item === 'string' ? undefined : item.key
+  const el = makeEl(type, key); if (!el) return
   graph.addCell(el)
   // if a Control is open in the inspector, refresh its link checklist to include the new part
   if (sel.isControl && (type === 'pump' || type === 'valve')) selectEl(selModel())
@@ -453,7 +458,7 @@ function applyPipe() {
   m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
 }
 function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -898,8 +903,8 @@ onUnmounted(() => {
     <div class="cols">
       <aside class="palette" :class="{ open: paletteOpen }">
         <div class="ptitle">Components</div>
-        <button v-for="p in palette" :key="p.type" :disabled="mode === 'run'" @click="addComponent(p.type)">
-          <component :is="PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
+        <button v-for="p in palette" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
+          <component :is="p.icon || PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
         </button>
         <div class="ptitle" style="margin-top:14px">My Components</div>
         <div v-for="c in customComps" :key="c.id" class="customrow">
