@@ -213,7 +213,7 @@ const QUALITY_METRIC_FIELD = { ph: 'ph', turbidity: 'turb', chlorine: 'cl', diss
 // state (localStorage save/load, in-canvas simulation/rendering) is
 // untouched; this only reshapes what "Export JSON" writes to disk.
 function stripMetricDuplicates(cell) {
-  if (!cell.metrics) return cell
+  if (!cell.metrics || cell.type === 's.Pump') return cell
   const clean = { ...cell }
   const metrics = {}
   for (const key in cell.metrics) {
