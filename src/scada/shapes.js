@@ -128,6 +128,38 @@ export const Note = joint.dia.Element.define('s.Note', { size: { width: 150, hei
   name: { x: 10, y: 'calc(h/2)', textVerticalAnchor: 'middle', fill: '#713f12', fontSize: 13, fontWeight: 'bold', text: 'Note' },
 } }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
 
+// New: instrument legend icon — small badge (tile + line-art glyph + label) for
+// placing standard instrument symbols (valves, transmitters, sensors) on canvas.
+// One shape, many presets (see INSTRUMENT_DEFS) — mirrors the Custom-shape pattern.
+export const Instrument = joint.dia.Element.define('s.Instrument', { size: { width: 72, height: 88 }, attrs: {
+  tile: { x: 8, y: 0, width: 56, height: 56, rx: 8, fill: '#ffffff', stroke: '#94a3b8', strokeWidth: 1.5 },
+  glyph: { d: '', transform: 'translate(16.8,8.8) scale(1.6)', fill: 'none', stroke: '#334155', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+  name: { x: 36, y: 72, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+} }, { markup: svg`<rect @selector="tile"/><path @selector="glyph"/><text @selector="name"/>` })
+
+// Presets consumed by Instrument — each glyph is authored in a 24x24 box, positioned
+// into the 56x56 tile via the shape's fixed 'glyph' transform above.
+export const INSTRUMENT_DEFS = [
+  { key: 'manualValve', label: 'Manual Valve',
+    glyph: 'M8,5 A4,4 0 1,0 16,5 A4,4 0 1,0 8,5 M12,9 L12,13 M4,13 L12,17 L4,21 Z M20,13 L12,17 L20,21 Z' },
+  { key: 'nrv', label: 'NRV',
+    glyph: 'M7,8 A5,5 0 1,0 17,8 A5,5 0 1,0 7,8 M8,8 L15,8 M12,5 L15,8 L12,11 M4,18 L20,18' },
+  { key: 'pressureTransmitter', label: 'Pressure Transmitter',
+    glyph: 'M7,6 A5,5 0 1,0 17,6 A5,5 0 1,0 7,6 M12,6 L15,3 M9,15 L9,21 L15,21 L15,15 Z' },
+  { key: 'instValve', label: 'Valve',
+    glyph: 'M4,7 L12,12 L4,17 Z M20,7 L12,12 L20,17 Z M2,12 L4,12 M20,12 L22,12' },
+  { key: 'turbidity', label: 'Turbidity',
+    glyph: 'M12,2 C16,8 19,12 19,15 A7,7 0 1,1 5,15 C5,12 8,8 12,2 Z M9,17 A1,1 0 1,0 9.01,17 M14,19 A1,1 0 1,0 14.01,19' },
+  { key: 'flowTransmitter', label: 'Flow Transmitter',
+    glyph: 'M2,12 L22,12 M2,8 L2,16 M22,8 L22,16 M8,7 L12,12 L8,17 M13,7 L17,12 L13,17' },
+  { key: 'radarLevel', label: 'Radar Level Sensor',
+    glyph: 'M8,2 L16,2 L16,7 L8,7 Z M12,7 L12,10 M6,13 A6,4 0 0,1 18,13 M9,17 A3,2 0 0,1 15,17' },
+  { key: 'chlorineAnalyzer', label: 'Chlorine Analyzer',
+    glyph: 'M10,2 L10,8 L4,20 A2,2 0 0,0 6,22 L18,22 A2,2 0 0,0 20,20 L14,8 L14,2 M9,2 L15,2 M12,14 C14,17 15,18 15,19 A3,3 0 1,1 9,19 C9,18 10,17 12,14 Z' },
+  { key: 'hydrostaticLevel', label: 'Hydrostatic Level Sensor',
+    glyph: 'M12,2 L12,16 M8,4 L16,4 M9,8 L15,8 M12,16 A3,3 0 1,0 12.01,16 M9,22 L15,22' },
+]
+
 // New: flow meter — inline turbine meter (flanged pipe + dial) with live m³/h below.
 export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84, height: 48 }, attrs: {
   flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
@@ -210,6 +242,7 @@ Object.assign(joint.shapes.s, {
   Tap,
   Flow: FlowMeter,
   Note,
+  Instrument,
   Custom,
   FlowPipe,
   Leader,
