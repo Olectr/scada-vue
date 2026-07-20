@@ -207,17 +207,29 @@ function defaultMetrics(keys) {
 // a metric's cell-level field doesn't always share its metric key name
 // (s.Quality uses short internal names) — map metric key -> cell field name
 const QUALITY_METRIC_FIELD = { ph: 'ph', turbidity: 'turb', chlorine: 'cl', dissolvedOxygen: 'do' }
+// default threshold rule for deriving pump on/off purely from metrics.on.value
+// (isPumpOn = metrics.on.value > metrics.on.stateMapping.compareValue)
+const PUMP_ON_STATE_MAPPING = { operator: '>', compareValue: 0 }
 // export-time cleanup: metrics carries the panel/DER/param linkage now, so
 // drop the cell's own flat field duplicating metrics.<key>.value (the value
 // filled in later via API stays as a null placeholder in metrics). Live app
 // state (localStorage save/load, in-canvas simulation/rendering) is
-// untouched; this only reshapes what "Export JSON" writes to disk.
+// untouched; this only reshapes what "Export JSON" writes to disk. s.Pump
+// keeps its root pressure/runtime fields (the live simulator still reads
+// them), but its root "on" is dropped in favor of metrics.on.stateMapping-
+// derived state, same as every other type's on/off, level, or reading field.
 function stripMetricDuplicates(cell) {
-  if (!cell.metrics || cell.type === 's.Pump') return cell
+  if (!cell.metrics) return cell
   const clean = { ...cell }
   const metrics = {}
   for (const key in cell.metrics) {
     metrics[key] = { ...cell.metrics[key], value: null }
+    if (cell.type === 's.Pump') {
+      if (key !== 'on') continue // pressure/runtime stay at root for the live simulator
+      metrics[key].stateMapping = cell.metrics[key].stateMapping || PUMP_ON_STATE_MAPPING
+      delete clean.on
+      continue
+    }
     const fieldName = cell.type === 's.Quality' ? (QUALITY_METRIC_FIELD[key] || key) : key
     delete clean[fieldName]
   }
