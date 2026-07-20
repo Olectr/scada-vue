@@ -7,6 +7,8 @@ import TrendChart from '../components/TrendChart.vue'
 import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
+// metric key(s) each instrument preset exposes for external panel/DER/param linkage (see defaultMetrics)
+const INSTRUMENT_METRIC_KEYS = { manualValve: ['open'], nrv: ['open'], pressureTransmitter: ['pressure'], instValve: ['open'], turbidity: ['turbidity'], flowTransmitter: ['flow', 'total'], radarLevel: ['level'], chlorineAnalyzer: ['chlorine'], hydrostaticLevel: ['level'] }
 
 const host = ref(null)
 const fitEl = ref(null)
@@ -237,8 +239,8 @@ function makeEl(type, key) {
     case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true), metrics: defaultMetrics(['flow', 'total']) })
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
-    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } } })
-    case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true) }) }
+    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } }, metrics: defaultMetrics(['label']) })
+    case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true), metrics: defaultMetrics(INSTRUMENT_METRIC_KEYS[key] || []) }) }
   }
 }
 function addComponent(item) {
