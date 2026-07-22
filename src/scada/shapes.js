@@ -103,6 +103,8 @@ export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, 
   fill: { x: 3, width: 'calc(w-6)', y: 3, height: 0, fill: '#16a34a', opacity: 0 }, // level fill (behavior=level)
   ind: { x: 'calc(w/2-8)', y: 'calc(h-13)', width: 16, height: 9, rx: 2, fill: '#16a34a', opacity: 0 }, // on/open indicator
   icon: { x: 'calc(w/2)', y: 'calc(h/2-2)', textAnchor: 'middle', textVerticalAnchor: 'middle', fontSize: 20, text: '' },
+  // optional AI/user-authored line-art glyph, authored in a 24x24 box (same convention as Instrument)
+  glyph: { d: '', fill: 'none', stroke: '#334155', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', opacity: 0 },
   val: { x: 'calc(w/2)', y: 'calc(h/2+14)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold', opacity: 0, text: '' },
   name: { x: 'calc(w/2)', y: 'calc(h+14)', textAnchor: 'middle', fill: '#3730a3', fontSize: 12, fontWeight: 'bold', text: 'Custom' },
 } }, { markup: [
@@ -111,6 +113,7 @@ export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, 
   { tagName: 'path', selector: 'bodyPath' },
   { tagName: 'rect', selector: 'fill' },
   { tagName: 'rect', selector: 'ind' },
+  { tagName: 'path', selector: 'glyph' },
   { tagName: 'text', selector: 'icon' },
   { tagName: 'text', selector: 'val' },
   { tagName: 'text', selector: 'name' },

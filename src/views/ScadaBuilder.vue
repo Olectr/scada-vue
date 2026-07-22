@@ -269,21 +269,6 @@ const CC_KEY = 'scada.builder.customComps'
 const customComps = ref([])
 function loadCustomComps() { try { customComps.value = JSON.parse(localStorage.getItem(CC_KEY) || '[]') } catch { customComps.value = [] } }
 function persistCustomComps() { localStorage.setItem(CC_KEY, JSON.stringify(customComps.value)) }
-const compForm = reactive({ open: false, label: '', shape: 'box', icon: '', color: '#e0e7ff', border: '#6366f1', w: 96, h: 60, behavior: 'static', vmin: 0, vmax: 100, unit: '', sides: { top: false, bottom: false, left: true, right: true } })
-function openCompForm() {
-  Object.assign(compForm, { open: true, label: 'My Part', shape: 'box', icon: '⚙', color: '#e0e7ff', border: '#6366f1', w: 96, h: 60, behavior: 'static', vmin: 0, vmax: 100, unit: '' })
-  compForm.sides = { top: false, bottom: false, left: true, right: true }
-}
-function saveCustomComp() {
-  const label = (compForm.label || '').trim(); if (!label) return
-  customComps.value = [...customComps.value, {
-    id: 'c' + Date.now(), label, shape: compForm.shape, icon: compForm.icon, color: compForm.color, border: compForm.border,
-    w: Number(compForm.w) || 96, h: Number(compForm.h) || 60, behavior: compForm.behavior,
-    vmin: Number.isNaN(Number(compForm.vmin)) ? 0 : Number(compForm.vmin),
-    vmax: Number.isNaN(Number(compForm.vmax)) ? 100 : Number(compForm.vmax), unit: compForm.unit, sides: { ...compForm.sides },
-  }]
-  persistCustomComps(); compForm.open = false
-}
 function deleteCustomComp(id) { customComps.value = customComps.value.filter(c => c.id !== id); persistCustomComps() }
 // apply a custom element's stored config to its visuals (run on create + on load)
 function renderCustom(el) {
@@ -296,7 +281,14 @@ function renderCustom(el) {
   if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
   const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
   el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
-  el.attr('icon/text', el.get('icon') || '')
+  const g = el.get('glyph') || ''
+  if (g) {
+    el.attr('glyph', { opacity: 1, d: g, stroke: border, transform: glyphTransform(w, h) })
+    el.attr('icon/text', '')
+  } else {
+    el.attr('glyph/opacity', 0)
+    el.attr('icon/text', el.get('icon') || '')
+  }
   const beh = el.get('behavior')
   if (beh === 'onoff' || beh === 'openclose') {
     const onv = beh === 'onoff' ? el.get('on') : el.get('open')
@@ -318,7 +310,7 @@ function makeCustom(def, x, y) {
   const el = new Custom({
     position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
     attrs: { name: { text: nextName(def.label || 'Custom') } },
-    shape: def.shape || 'box', icon: def.icon || '', fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
+    shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
     behavior: def.behavior || 'static', vmin: def.vmin ?? 0, vmax: def.vmax ?? 100, unit: def.unit || '',
     on: true, open: true, level: 60, value: ((def.vmin ?? 0) + (def.vmax ?? 100)) / 2,
     ports: portsCfg(customSidePorts(def, w, h), true),
@@ -349,54 +341,99 @@ function importCompLib(e) {
   r.readAsText(f)
 }
 
-// --- AI prompt → auto-generate a screen (local heuristic parser; swap in an LLM here) ---
-const ai = reactive({ open: false, text: '' })
-function openAi() { ai.open = true; if (!ai.text) ai.text = '2 tanks, 2 pumps, 2 valves, a flow meter, a control and a chart' }
-async function generateFromPrompt() {
-  if (!graph) return
-  const text = (ai.text || '').toLowerCase()
-  if (graph.getElements().length && !(await confirmBox('Replace the canvas with the generated design?', { title: 'AI Generate', okText: 'Generate', danger: true }))) return
-  const prev = snapKey() // so the pre-generate canvas can be restored (undo / on error)
-  ai.open = false; mode.value = 'edit'
-  restoring = true // suppress per-add snapshots while building
-  try {
-    graph.clear(); for (const k in counters) delete counters[k]
-    const cnt = kw => { const m = new RegExp('(\\d+)\\s*' + kw).exec(text); return m ? +m[1] : (text.includes(kw) ? 1 : 0) }
-    const seq = []
-    for (let i = 0; i < cnt('tank'); i++) seq.push('tank')
-    for (let i = 0; i < cnt('valve'); i++) seq.push('valve')
-    for (let i = 0; i < cnt('pump'); i++) seq.push('pump')
-    for (let i = 0; i < (cnt('flow meter') || cnt('flow')); i++) seq.push('flow')
-    for (let i = 0; i < cnt('hopper'); i++) seq.push('hopper')
-    for (let i = 0; i < cnt('zone'); i++) seq.push('zone')
-    if (!seq.length) seq.push('tank', 'pump', 'zone') // fallback minimal chain
-    const portOut = { tank: 'bot', hopper: 'bot', pump: 'r', valve: 'r', flow: 'r', zone: 'p' }
-    const portIn = { tank: 'top', hopper: 'in', pump: 'l', valve: 'l', flow: 'l', zone: 'p' }
-    let x = 90; const y = 150; const els = []
-    seq.forEach(tp => { const e = makeEl(tp); e.position(x, y); graph.addCell(e); els.push({ e, tp }); x += e.size().width + 90 })
-    for (let i = 0; i < els.length - 1; i++) {
-      const a = els[i], b = els[i + 1]
-      graph.addCell(new FlowPipe({ source: { id: a.e.id, port: portOut[a.tp] || 'r' }, target: { id: b.e.id, port: portIn[b.tp] || 'l' } }))
-    }
-    let bx = 90; const by = y + 280
-    const extra = (tp, n) => { for (let i = 0; i < n; i++) { const e = makeEl(tp); e.position(bx, by); graph.addCell(e); bx += e.size().width + 50 } }
-    extra('control', cnt('control'))
-    extra('gauge', cnt('gauge'))
-    extra('quality', cnt('quality'))
-    extra('chart', cnt('chart'))
-    const ctrl = graph.getElements().find(e => e.get('type') === 's.Control')
-    const firstPump = els.find(o => o.tp === 'pump')
-    if (ctrl && firstPump) ctrl.set('targets', [firstPump.e.id])
-  } catch (err) {
-    graph.fromJSON(JSON.parse(prev)); migrateCells() // build failed → restore the previous canvas
-    restoring = false; selectEl(null); syncOverlays()
-    alertBox('Could not generate the design.', 'Generation failed'); return
+// --- AI component generator: free-text prompt → Claude → custom component def in "My Components" ---
+// The generated JSON is the same def shape "My Components" stores, so AI parts flow through the
+// existing makeCustom/renderCustom/export pipeline (incl. behavior→metrics linkage) unchanged.
+const AI_COMP_SYSTEM = `You design components for an industrial/water SCADA screen builder. The user describes any plant part (pump, doser, filter, sensor, motor, blower, UV unit, ...) and you output one component definition.
+
+Field semantics:
+- label: short display name (max ~18 chars).
+- shape: body outline. cylinder suits vessels/tanks, circle suits pumps/blowers/instruments, diamond suits valves, triangle suits hoppers/funnels, box is the general default.
+- color/border: hex colors that read well on a light canvas; pick hues that hint at the medium (blue=water, green=chemical ok, amber=power/heat, slate=mechanical).
+- w/h: px, keep within 60-180 x 40-140 unless the part is clearly large (vessel) or small (sensor).
+- behavior: onoff for powered equipment that starts/stops (gates flow when off), openclose for valves/gates, level for vessels that fill/drain (shows %), meter for instruments showing a live value, static for passive parts.
+- vmin/vmax/unit: sensible range + engineering unit for meter (e.g. 0-10 bar, 0-14 pH, 0-200 m3/h). For level use 0-100. Otherwise 0/100 and empty unit.
+- sides: ports where pipes connect. Inline equipment: left+right. Vessels: top+bottom. Sensors that tap a line: bottom or left only.
+- glyph: a single SVG path "d" string drawn in a 24x24 box — simple line-art like P&ID symbols, stroke-only (never filled), 2px stroke look. Example pump glyph: "M7,8 A5,5 0 1,0 17,8 A5,5 0 1,0 7,8 M8,8 L15,8 M12,5 L15,8 L12,11 M4,18 L20,18". Prefer a glyph; set icon to a fallback emoji anyway.
+
+Respond with ONLY one JSON object — no markdown fences, no commentary — with exactly these keys:
+{"label": string, "shape": "box"|"circle"|"diamond"|"triangle"|"cylinder", "icon": string (one emoji), "color": "#rrggbb", "border": "#rrggbb", "w": integer, "h": integer, "behavior": "static"|"onoff"|"openclose"|"level"|"meter", "vmin": number, "vmax": number, "unit": string, "sides": {"top": boolean, "bottom": boolean, "left": boolean, "right": boolean}, "glyph": string}`
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-4.5'
+const aiComp = reactive({ open: false, prompt: '', loading: false, error: '', result: null })
+function openAiComp() { aiComp.open = true; aiComp.error = '' }
+const HEX_RE = /^#[0-9a-fA-F]{6}$/
+const GLYPH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9,.\s+-]*$/ // path-data chars only — keeps arbitrary SVG/script out
+function normalizeAiComp(d) {
+  const clamp = (n, lo, hi, def) => Number.isFinite(+n) ? Math.min(hi, Math.max(lo, +n)) : def
+  const sides = { top: !!d.sides?.top, bottom: !!d.sides?.bottom, left: !!d.sides?.left, right: !!d.sides?.right }
+  if (!sides.top && !sides.bottom && !sides.left && !sides.right) { sides.left = true; sides.right = true }
+  const behavior = ['static', 'onoff', 'openclose', 'level', 'meter'].includes(d.behavior) ? d.behavior : 'static'
+  let vmin = clamp(d.vmin, -1e6, 1e6, 0), vmax = clamp(d.vmax, -1e6, 1e6, 100)
+  if (vmax <= vmin) { vmin = 0; vmax = 100 }
+  return {
+    label: String(d.label || 'AI Part').slice(0, 24),
+    shape: ['box', 'circle', 'diamond', 'triangle', 'cylinder'].includes(d.shape) ? d.shape : 'box',
+    icon: String(d.icon || '').slice(0, 2),
+    color: HEX_RE.test(d.color) ? d.color : '#e0e7ff',
+    border: HEX_RE.test(d.border) ? d.border : '#6366f1',
+    w: clamp(d.w, 40, 260, 96), h: clamp(d.h, 30, 240, 60),
+    behavior, vmin, vmax, unit: String(d.unit || '').slice(0, 8), sides,
+    glyph: GLYPH_RE.test(d.glyph || '') ? String(d.glyph || '').slice(0, 1200) : '',
   }
-  restoring = false
-  currentName.value = ''; selectEl(null); syncOverlays()
-  // record one undoable step: prev → generated
-  past.push(prev); if (past.length > 60) past.shift(); future.length = 0; lastJSON = snapKey(); syncHistFlags()
 }
+async function generateAiComp() {
+  const prompt = (aiComp.prompt || '').trim()
+  if (!prompt || aiComp.loading) return
+  const key = import.meta.env.VITE_OPENROUTER_API_KEY
+  if (!key) { aiComp.error = 'No API key found. Put VITE_OPENROUTER_API_KEY=sk-or-... in .env and restart the dev server.'; return }
+  aiComp.loading = true; aiComp.error = ''; aiComp.result = null
+  try {
+    const r = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: 2048,
+        messages: [
+          { role: 'system', content: AI_COMP_SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    })
+    if (!r.ok) {
+      const detail = await r.json().then(j => j?.error?.message || '').catch(() => '')
+      const err = new Error(detail || `Request failed (${r.status})`)
+      err.status = r.status
+      throw err
+    }
+    const data = await r.json()
+    let text = (data?.choices?.[0]?.message?.content || '').trim()
+    // tolerate models that wrap JSON in ``` fences or add prose around it
+    const a = text.indexOf('{'), b = text.lastIndexOf('}')
+    if (a === -1 || b <= a) throw new Error('Model returned no JSON — retry or set a stronger model via VITE_OPENROUTER_MODEL.')
+    aiComp.result = normalizeAiComp(JSON.parse(text.slice(a, b + 1)))
+  } catch (err) {
+    aiComp.result = null
+    aiComp.error = err?.status === 401 ? 'API key rejected (401). Check VITE_OPENROUTER_API_KEY.'
+      : err?.status === 402 ? 'OpenRouter credits exhausted (402). Top up your account.'
+      : err?.status === 404 ? `Model "${AI_MODEL}" not found on OpenRouter (404). Set VITE_OPENROUTER_MODEL in .env to a valid model id.`
+      : err?.status === 429 ? 'Rate limited (429). Wait a moment and retry.'
+      : (err?.message || 'Generation failed — check network/key and retry.')
+  } finally { aiComp.loading = false }
+}
+function saveAiComp() {
+  if (!aiComp.result) return
+  customComps.value = [...customComps.value, { id: 'c' + Date.now(), ...aiComp.result }]
+  persistCustomComps()
+  aiComp.open = false; aiComp.result = null; aiComp.prompt = ''
+}
+// scale a 24x24 glyph into the middle ~55% of a w×h body (shared by canvas render + modal preview)
+function glyphTransform(w, h) {
+  const s = Math.min(w, h) * 0.55 / 24
+  return `translate(${w / 2 - 12 * s},${h / 2 - 12 * s}) scale(${s})`
+}
+function aiGlyphTransform(def) { return glyphTransform(def.w, def.h) }
 
 const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
@@ -903,7 +940,7 @@ onUnmounted(() => {
         </select>
         <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
       </div>
-      <button class="ai" @click="openAi"><Sparkles :size="15" /> AI Generate</button>
+      <button class="ai" :disabled="mode === 'run'" @click="openAiComp"><Sparkles :size="15" /> AI Component</button>
       <span class="sp"></span>
       <button class="drawer-toggle" :class="{ on: paletteOpen }" title="Components" @click="paletteOpen = !paletteOpen; inspectorOpen = false"><PanelLeft :size="15" /></button>
       <button class="drawer-toggle" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen; paletteOpen = false"><PanelRight :size="15" /></button>
@@ -925,7 +962,6 @@ onUnmounted(() => {
           <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
           <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
         </div>
-        <button :disabled="mode === 'run'" class="newcomp" @click="openCompForm"><Plus :size="15" /> New component</button>
         <div class="liblinks">
           <a @click="exportCompLib"><Download :size="13" /> Export</a>
           <a @click="pickCompLib"><Upload :size="13" /> Import</a>
@@ -1100,65 +1136,36 @@ onUnmounted(() => {
     </div>
 
     <!-- new custom component -->
-    <div v-if="compForm.open" class="fsmodal" @click.self="compForm.open = false">
+    <!-- AI component generator -->
+    <div v-if="aiComp.open" class="fsmodal" @click.self="aiComp.open = false">
       <div class="dlg">
-        <div class="fshead"><b>New custom component</b><button @click="compForm.open = false"><X :size="15" /></button></div>
+        <div class="fshead"><b><Sparkles :size="15" style="vertical-align:-2px" /> AI component</b><button @click="aiComp.open = false"><X :size="15" /></button></div>
         <div class="dlgbody">
-          <label>Name<input type="text" v-model="compForm.label"></label>
-          <div class="frow">
-            <label>Shape
-              <select v-model="compForm.shape">
-                <option value="box">Box</option><option value="circle">Circle</option>
-                <option value="diamond">Diamond</option><option value="triangle">Triangle</option>
-                <option value="cylinder">Cylinder</option>
-              </select>
-            </label>
-            <label>Icon/emoji<input type="text" v-model="compForm.icon" maxlength="2" placeholder="⚙"></label>
-          </div>
-          <div class="frow">
-            <label>Fill<input type="color" v-model="compForm.color"></label>
-            <label>Border<input type="color" v-model="compForm.border"></label>
-          </div>
-          <div class="frow">
-            <label>Width<input type="number" min="40" v-model.number="compForm.w"></label>
-            <label>Height<input type="number" min="30" v-model.number="compForm.h"></label>
-          </div>
-          <div>
-            <div class="tlabel">Ports</div>
-            <div class="sides">
-              <label class="chk"><input type="checkbox" v-model="compForm.sides.top"> Top</label>
-              <label class="chk"><input type="checkbox" v-model="compForm.sides.bottom"> Bottom</label>
-              <label class="chk"><input type="checkbox" v-model="compForm.sides.left"> Left</label>
-              <label class="chk"><input type="checkbox" v-model="compForm.sides.right"> Right</label>
+          <textarea v-model="aiComp.prompt" rows="3" :disabled="aiComp.loading"
+                    placeholder="e.g. a chlorine dosing pump with on/off state, or a UV disinfection unit, or a pressure sensor reading 0–10 bar"
+                    @keydown.enter.exact.prevent="generateAiComp"></textarea>
+          <div class="hint">Describe any plant part. AI maps it to this builder's component JSON — shape, colors, ports, live behavior, symbol — and it lands in “My Components”.</div>
+          <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
+          <div v-if="aiComp.result" class="aiprev">
+            <svg class="aiprevsvg" :viewBox="'-2 -2 ' + (aiComp.result.w + 4) + ' ' + (aiComp.result.h + 4)">
+              <rect v-if="aiComp.result.shape === 'box'" :width="aiComp.result.w" :height="aiComp.result.h" rx="8" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+              <ellipse v-else-if="aiComp.result.shape === 'circle'" :cx="aiComp.result.w / 2" :cy="aiComp.result.h / 2" :rx="aiComp.result.w / 2" :ry="aiComp.result.h / 2" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+              <path v-else :d="customPath(aiComp.result.shape, aiComp.result.w, aiComp.result.h)" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+              <path v-if="aiComp.result.glyph" :d="aiComp.result.glyph" fill="none" :stroke="aiComp.result.border" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :transform="aiGlyphTransform(aiComp.result)" />
+              <text v-else-if="aiComp.result.icon" :x="aiComp.result.w / 2" :y="aiComp.result.h / 2" text-anchor="middle" dominant-baseline="central" font-size="20">{{ aiComp.result.icon }}</text>
+            </svg>
+            <div class="aiprevmeta">
+              <b>{{ aiComp.result.label }}</b>
+              <span>{{ aiComp.result.shape }} · {{ aiComp.result.behavior }}<template v-if="aiComp.result.behavior === 'meter'"> · {{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</template></span>
+              <span>ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
             </div>
           </div>
-          <label>Behavior (live)
-            <select v-model="compForm.behavior">
-              <option value="static">Static</option>
-              <option value="onoff">On / Off (click to toggle, gates flow)</option>
-              <option value="openclose">Open / Close (gates flow)</option>
-              <option value="level">Level (fills/drains, shows %)</option>
-              <option value="meter">Meter (shows live value)</option>
-            </select>
-          </label>
-          <div v-if="compForm.behavior === 'meter' || compForm.behavior === 'level'" class="frow">
-            <label>Min<input type="number" v-model.number="compForm.vmin"></label>
-            <label>Max<input type="number" v-model.number="compForm.vmax"></label>
-            <label v-if="compForm.behavior === 'meter'">Unit<input type="text" v-model="compForm.unit" maxlength="6" placeholder="bar"></label>
+          <div class="frow">
+            <button class="primary" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
+              <Sparkles :size="14" style="vertical-align:-2px" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
+            </button>
+            <button v-if="aiComp.result" class="primary" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" style="vertical-align:-2px" /> Add to My Components</button>
           </div>
-          <button class="primary" @click="saveCustomComp">Create</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- AI generate -->
-    <div v-if="ai.open" class="fsmodal" @click.self="ai.open = false">
-      <div class="dlg">
-        <div class="fshead"><b><Sparkles :size="15" style="vertical-align:-2px" /> Generate from prompt</b><button @click="ai.open = false"><X :size="15" /></button></div>
-        <div class="dlgbody">
-          <textarea v-model="ai.text" rows="3" placeholder="e.g. 2 tanks, 3 pumps, 2 valves, a flow meter, a control and a chart"></textarea>
-          <div class="hint">Local parser: reads component types + counts and builds a connected chain. (Swap in an LLM for richer prompts.)</div>
-          <button class="primary" @click="generateFromPrompt">Generate</button>
         </div>
       </div>
     </div>
@@ -1214,8 +1221,6 @@ onUnmounted(() => {
 .toolbar button:disabled { opacity: .4; cursor: not-allowed; }
 .toolbar button:focus-visible, .palette button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .toolbar button.on { background: var(--accent); color: #fff; }
-.toolbar button.ai { background: var(--accent); color: #fff; padding: 6px 12px; }
-.toolbar button.ai:hover { filter: brightness(1.08); background: var(--accent); color: #fff; }
 .toolbar .loadsel { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .builder.dark .toolbar { color: var(--text); }
 .builder.dark .toolbar button.on { background: #2563eb; color: #fff; }
@@ -1321,7 +1326,6 @@ onUnmounted(() => {
 .customrow { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .customrow .ccadd { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; }
 .customrow .ccdel { color: #ef4444; cursor: pointer; font-weight: 700; padding: 4px 6px; }
-.newcomp { width: 100%; border-style: dashed !important; color: #6366f1 !important; }
 .dlg { background: var(--surface-elevated); border-radius: var(--r-lg); width: min(420px, 92vw); box-shadow: var(--shadow-modal); overflow: hidden; animation: modalpop .26s cubic-bezier(.32,.72,0,1); }
 .dlgbody { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
 .dlgbody label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
@@ -1346,8 +1350,14 @@ onUnmounted(() => {
 .liblinks { display: flex; gap: 14px; margin-top: 8px; padding-left: 2px; }
 .liblinks a { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .liblinks a:hover { text-decoration: underline; }
-.newcomp { justify-content: center; border: 1px dashed var(--border) !important; color: var(--accent) !important; margin-top: 4px; }
-.newcomp:hover:not(:disabled) { border-color: var(--accent) !important; }
+.toolbar button.ai { background: var(--accent); color: #fff; padding: 6px 12px; }
+.toolbar button.ai:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: #fff; }
+.toolbar button.ai:disabled { opacity: .5; cursor: not-allowed; }
+.aierr { font-size: 12px; font-weight: 600; color: #dc2626; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25); border-radius: var(--r-md); padding: 8px 10px; }
+.aiprev { display: flex; align-items: center; gap: 14px; border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; background: var(--surface-2); }
+.aiprevsvg { flex: none; max-width: 130px; max-height: 90px; }
+.aiprevmeta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+.aiprevmeta b { color: var(--text); font-size: 13px; }
 
 /* ---------- responsive: palette/inspector become off-canvas drawers ---------- */
 .drawer-toggle { display: none; }
