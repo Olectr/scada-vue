@@ -31,18 +31,21 @@ for (let v = 0; v <= 100; v += 10) {
   scaleNodes.push({ tagName: 'text', attributes: { x: 90, y: y + 4, fill: '#1f2d3d', 'font-size': 10, 'font-weight': 'bold' }, textContent: String(v) })
 }
 
+// NOTE (resizable components): shapes listed in SCALE_BASE below draw their art in fixed
+// base-size coordinates inside a 'sc' wrapper group; resizing applies scale() on that group.
+// Keep their attrs absolute (no calc()) or the art double-scales.
 export const CylTank = joint.dia.Element.define('s.Cyl', { size: { width: 150, height: 250 }, attrs: {
-  body: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
-  capBot: { cx: 'calc(w/2)', cy: 'calc(h)', rx: 'calc(w/2)', ry: 13, fill: STEEL, stroke: '#7c858f' },
-  capTop: { cx: 'calc(w/2)', cy: 0, rx: 'calc(w/2)', ry: 13, fill: SILVER, stroke: '#7c858f' },
+  body: { x: 0, y: 0, width: 150, height: 250, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
+  capBot: { cx: 75, cy: 250, rx: 75, ry: 13, fill: STEEL, stroke: '#7c858f' },
+  capTop: { cx: 75, cy: 0, rx: 75, ry: 13, fill: SILVER, stroke: '#7c858f' },
   win: { x: 44, y: 36, width: 32, height: 178, fill: '#d7dbe4', stroke: '#6b7280', strokeWidth: 1, rx: 2 },
   fill: { x: 46, width: 28, fill: '#16a34a' },
   // sim-range markers on the scale (stroke set by the builder via setTankMarks; hidden by default so other screens are unaffected)
   markLo: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
   markHi: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
-  name: { x: 'calc(w/2)', y: 'calc(h+30)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
-  legL: { d: 'M 32 calc(h) l -8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
-  legR: { d: 'M calc(w-32) calc(h) l 8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
+  name: { x: 75, y: 280, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
+  legL: { d: 'M 32 250 l -8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
+  legR: { d: 'M 118 250 l 8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
 } }, { markup: [
   { tagName: 'path', selector: 'legL' }, { tagName: 'path', selector: 'legR' },
   { tagName: 'rect', selector: 'body' }, { tagName: 'ellipse', selector: 'capBot' }, { tagName: 'ellipse', selector: 'capTop' },
@@ -52,12 +55,12 @@ export const CylTank = joint.dia.Element.define('s.Cyl', { size: { width: 150, h
 ] })
 
 export const Hopper = joint.dia.Element.define('s.Hopper', { size: { width: 170, height: 230 }, attrs: {
-  cone: { d: 'M 0 108 L calc(w) 108 L calc(w/2+14) 205 L calc(w/2-14) 205 Z', fill: STEEL, stroke: '#7c858f' },
-  outlet: { x: 'calc(w/2-9)', y: 205, width: 18, height: 18, fill: STEEL, stroke: '#7c858f' },
-  cyl: { x: 0, y: 18, width: 'calc(w)', height: 90, fill: SILVER, stroke: '#7c858f' },
-  fill: { x: 6, width: 'calc(w-12)', fill: '#16a34a', opacity: 0.85 },
-  capTop: { cx: 'calc(w/2)', cy: 18, rx: 'calc(w/2)', ry: 15, fill: SILVER, stroke: '#7c858f' },
-  name: { x: 'calc(w/2)', y: -6, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
+  cone: { d: 'M 0 108 L 170 108 L 99 205 L 71 205 Z', fill: STEEL, stroke: '#7c858f' },
+  outlet: { x: 76, y: 205, width: 18, height: 18, fill: STEEL, stroke: '#7c858f' },
+  cyl: { x: 0, y: 18, width: 170, height: 90, fill: SILVER, stroke: '#7c858f' },
+  fill: { x: 6, width: 158, fill: '#16a34a', opacity: 0.85 },
+  capTop: { cx: 85, cy: 18, rx: 85, ry: 15, fill: SILVER, stroke: '#7c858f' },
+  name: { x: 85, y: -6, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
 } }, { markup: svg`<path @selector="cone"/><rect @selector="outlet"/><rect @selector="cyl"/><rect @selector="fill"/><ellipse @selector="capTop"/><text @selector="name"/>` })
 
 export const Pump = joint.dia.Element.define('s.Pump', { size: { width: 92, height: 92 }, attrs: {
@@ -100,6 +103,8 @@ export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, 
   bodyRect: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5 },
   bodyEllipse: { cx: 'calc(w/2)', cy: 'calc(h/2)', rx: 'calc(w/2)', ry: 'calc(h/2)', fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5, opacity: 0 },
   bodyPath: { d: '', fill: '#e0e7ff', stroke: '#6366f1', strokeWidth: 1.5, opacity: 0 },
+  // free-form AI-drawn SVG body, rendered as a data-URI image (scripts/external refs can't execute in image context)
+  svgImg: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', preserveAspectRatio: 'xMidYMid meet', opacity: 0 },
   fill: { x: 3, width: 'calc(w-6)', y: 3, height: 0, fill: '#16a34a', opacity: 0 }, // level fill (behavior=level)
   ind: { x: 'calc(w/2-8)', y: 'calc(h-13)', width: 16, height: 9, rx: 2, fill: '#16a34a', opacity: 0 }, // on/open indicator
   icon: { x: 'calc(w/2)', y: 'calc(h/2-2)', textAnchor: 'middle', textVerticalAnchor: 'middle', fontSize: 20, text: '' },
@@ -111,6 +116,7 @@ export const Custom = joint.dia.Element.define('s.Custom', { size: { width: 96, 
   { tagName: 'rect', selector: 'bodyRect' },
   { tagName: 'ellipse', selector: 'bodyEllipse' },
   { tagName: 'path', selector: 'bodyPath' },
+  { tagName: 'image', selector: 'svgImg' },
   { tagName: 'rect', selector: 'fill' },
   { tagName: 'rect', selector: 'ind' },
   { tagName: 'path', selector: 'glyph' },
@@ -171,7 +177,7 @@ export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84,
   head: { cx: 42, cy: 18, r: 16, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
   dial: { cx: 42, cy: 18, r: 12, fill: '#dff1f7', stroke: '#5b6772' },
   rotor: { d: 'M42 18 L42 8 Q49 11 47 16 Z M42 18 L52 18 Q49 25 44 23 Z M42 18 L42 28 Q35 25 37 20 Z M42 18 L32 18 Q35 11 40 13 Z', fill: '#0e7490' },
-  val: { x: 42, y: 'calc(h+15)', textAnchor: 'middle', fill: '#0e7490', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
+  val: { x: 42, y: 63, textAnchor: 'middle', fill: '#0e7490', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
 } }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><path @selector="rotor"/><text @selector="val"/>` })
 
 // New: pressure tap — inline pressure indicator (flanged pipe + dial) showing live bar.
@@ -182,21 +188,21 @@ export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 84, height
   head: { cx: 42, cy: 16, r: 15, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
   dial: { cx: 42, cy: 16, r: 11, fill: '#fde8e8', stroke: '#5b6772' },
   pVal: { x: 42, y: 20, textAnchor: 'middle', fill: '#b91c1c', fontSize: 10, fontWeight: 'bold', text: '0.0' },
-  val: { x: 42, y: 'calc(h+15)', textAnchor: 'middle', fill: '#b91c1c', fontSize: 12, fontWeight: 'bold', text: '0.0 bar' },
+  val: { x: 42, y: 63, textAnchor: 'middle', fill: '#b91c1c', fontSize: 12, fontWeight: 'bold', text: '0.0 bar' },
 } }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><text @selector="pVal"/><text @selector="val"/>` })
 
 // New: water-quality analyzer — live pH / Turbidity / Cl / DO readout.
 export const Quality = joint.dia.Element.define('s.Quality', { size: { width: 156, height: 118 }, attrs: {
-  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#fff', stroke: '#cbd5e1', strokeWidth: 1 },
-  title: { x: 'calc(w/2)', y: 18, textAnchor: 'middle', fill: '#334155', fontSize: 12, fontWeight: 'bold', text: 'Water Quality' },
+  box: { x: 0, y: 0, width: 156, height: 118, rx: 8, fill: '#fff', stroke: '#cbd5e1', strokeWidth: 1 },
+  title: { x: 78, y: 18, textAnchor: 'middle', fill: '#334155', fontSize: 12, fontWeight: 'bold', text: 'Water Quality' },
   phL: { x: 12, y: 42, fill: '#64748b', fontSize: 11, text: 'pH' },
-  phV: { x: 'calc(w-12)', y: 42, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  phV: { x: 144, y: 42, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
   tbL: { x: 12, y: 62, fill: '#64748b', fontSize: 11, text: 'Turbidity' },
-  tbV: { x: 'calc(w-12)', y: 62, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  tbV: { x: 144, y: 62, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
   clL: { x: 12, y: 82, fill: '#64748b', fontSize: 11, text: 'Cl' },
-  clV: { x: 'calc(w-12)', y: 82, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  clV: { x: 144, y: 82, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
   doL: { x: 12, y: 102, fill: '#64748b', fontSize: 11, text: 'DO' },
-  doV: { x: 'calc(w-12)', y: 102, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  doV: { x: 144, y: 102, textAnchor: 'end', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
 } }, { markup: svg`<rect @selector="box"/><text @selector="title"/><text @selector="phL"/><text @selector="phV"/><text @selector="tbL"/><text @selector="tbV"/><text @selector="clL"/><text @selector="clV"/><text @selector="doL"/><text @selector="doV"/>` })
 
 // New: chart frame element (builder). A live trend chart (HTML overlay) is drawn on top.
@@ -204,6 +210,23 @@ export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, h
   box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1 },
   name: { x: 'calc(w/2)', y: 'calc(h+16)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
 } }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
+
+// ---- resizable fixed-art shapes: uniform scaling via an 'sc' wrapper group ----
+// Art stays in base-size coordinates; el.attr('sc/transform', 'scale(s)') zooms it while the
+// model size tracks base*s so ports, links, and selection bboxes stay aligned.
+export const SCALE_BASE = {
+  's.Cyl': { w: 150, h: 250 }, 's.Hopper': { w: 170, h: 230 }, 's.Pump': { w: 92, h: 92 },
+  's.Valve': { w: 76, h: 92 }, 's.PG': { w: 96, h: 96 }, 's.Flow': { w: 84, h: 48 },
+  's.Tap': { w: 84, h: 48 }, 's.Quality': { w: 156, h: 118 }, 's.Instrument': { w: 72, h: 88 },
+}
+for (const C of [CylTank, Hopper, Pump, Valve, PGauge, FlowMeter, Tap, Quality, Instrument]) {
+  C.prototype.markup = [{ tagName: 'g', selector: 'sc', children: C.prototype.markup }]
+}
+export function applyScale(el) {
+  const base = SCALE_BASE[el.get('type')]; if (!base) return
+  const s = el.get('scale') || 1
+  el.attr('sc/transform', 'scale(' + s + ')')
+}
 
 // New: flow pipe link — grey tube + green dashed flow in one interactive link.
 export const FlowPipe = joint.dia.Link.define('s.FlowPipe', {

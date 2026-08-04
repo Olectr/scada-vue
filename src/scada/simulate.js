@@ -41,8 +41,9 @@ function tank(elm, isHopper, inflow, outflow) {
     else lvl = lvl < 90 ? clamp(lvl + rnd(1, 2.5), 8, 95) : drift(lvl, 90, 95, 1.2) // idle: gently climb into 90-95 mock band
   }
   elm.set('level', lvl, { silent: true })
+  // art lives in base-size coords inside the 'sc' scale group — never use elm.size() here
   if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
-  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
+  else elm.attr('fill', { y: 36 + 178 * (1 - lvl / 100), height: 178 * lvl / 100 })
 }
 
 // Visual-only helpers (no value drift) — shared so the builder's edit-mode
@@ -142,7 +143,24 @@ function custom(elm) {
     const lvl = drift(elm.get('level') ?? (lo + hi) / 2, lo, hi, Math.max(0.5, (hi - lo) / 50))
     elm.set('level', lvl, { silent: true })
     const frac = hi > lo ? (lvl - lo) / (hi - lo) : 0
-    elm.attr('fill', { opacity: 0.45, y: 3 + (h - 6) * (1 - frac), height: (h - 6) * frac })
+    if (elm.get('svgBody')) {
+      // AI-drawn body: animate the fill inside the declared liquid-interior zone (0..1 fractions of the ART,
+      // not the element box — the drawing is letterboxed/centered when aspect ratios differ)
+      const z = elm.get('levelZone')
+      if (z && z.w > 0 && z.h > 0) {
+        const w = elm.size().width
+        const vb = elm.get('svgVB')
+        let ox = 0, oy = 0, aw = w, ah = h
+        if (vb && vb.w > 0 && vb.h > 0) {
+          const s = Math.min(w / vb.w, h / vb.h)
+          aw = vb.w * s; ah = vb.h * s
+          ox = (w - aw) / 2; oy = (h - ah) / 2
+        }
+        elm.attr('fill', { opacity: 0.5, rx: 2, x: ox + z.x * aw, width: z.w * aw, y: oy + (z.y + z.h * (1 - frac)) * ah, height: z.h * frac * ah })
+      } else elm.attr('fill/opacity', 0)
+    } else {
+      elm.attr('fill', { opacity: 0.45, y: 3 + (h - 6) * (1 - frac), height: (h - 6) * frac })
+    }
     elm.attr('val', { opacity: 1, text: Math.round(frac * 100) + '%' })
   } else if (beh === 'meter') {
     const lo = elm.get('vmin') ?? 0, hi = elm.get('vmax') ?? 10

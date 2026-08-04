@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS } from '../scada/shapes'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, SCALE_BASE, applyScale } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import TrendChart from '../components/TrendChart.vue'
 import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
@@ -114,8 +114,10 @@ function migrateCells() {
         const oldFill = e.attr('box/fill'); if (oldFill) e.set('fillColor', oldFill)
         if (!e.get('borderColor')) e.set('borderColor', '#6366f1')
       }
+      if (e.get('svgBody') && !e.get('svgVB')) e.set('svgVB', parseSvgVB(e.get('svgBody'))) // backfill for pre-svgVB saves
       renderCustom(e) // re-apply shape/icon/colors after load
     }
+    applyScale(e) // re-apply per-element scale on fixed-art shapes (no-op at scale 1 / other types)
     // backfill metrics: add the panel/DER/param/value linkage for any expected key missing
     // it entirely (older exports had no metrics object at all), and add a null value
     // placeholder to any metric that predates the value field.
@@ -274,20 +276,29 @@ function deleteCustomComp(id) { customComps.value = customComps.value.filter(c =
 function renderCustom(el) {
   const w = el.size().width, h = el.size().height, shape = el.get('shape') || 'box'
   const fill = el.get('fillColor') || '#e0e7ff', border = el.get('borderColor') || '#6366f1'
-  el.attr('bodyRect/opacity', shape === 'box' ? 1 : 0)
-  el.attr('bodyEllipse/opacity', shape === 'circle' ? 1 : 0)
-  const usePath = shape === 'diamond' || shape === 'triangle' || shape === 'cylinder'
-  el.attr('bodyPath/opacity', usePath ? 1 : 0)
-  if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
-  const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
-  el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
-  const g = el.get('glyph') || ''
-  if (g) {
-    el.attr('glyph', { opacity: 1, d: g, stroke: border, transform: glyphTransform(w, h) })
-    el.attr('icon/text', '')
+  const svgBody = el.get('svgBody') || ''
+  if (svgBody) {
+    // AI-drawn realistic body replaces the primitive shape + glyph/emoji entirely
+    el.attr('bodyRect/opacity', 0); el.attr('bodyEllipse/opacity', 0); el.attr('bodyPath/opacity', 0)
+    el.attr('svgImg', { opacity: 1, href: svgDataUri(svgBody), width: w, height: h })
+    el.attr('glyph/opacity', 0); el.attr('icon/text', ''); el.attr('fill/opacity', 0)
   } else {
-    el.attr('glyph/opacity', 0)
-    el.attr('icon/text', el.get('icon') || '')
+    el.attr('svgImg/opacity', 0)
+    el.attr('bodyRect/opacity', shape === 'box' ? 1 : 0)
+    el.attr('bodyEllipse/opacity', shape === 'circle' ? 1 : 0)
+    const usePath = shape === 'diamond' || shape === 'triangle' || shape === 'cylinder'
+    el.attr('bodyPath/opacity', usePath ? 1 : 0)
+    if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
+    const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
+    el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
+    const g = el.get('glyph') || ''
+    if (g) {
+      el.attr('glyph', { opacity: 1, d: g, stroke: border, transform: glyphTransform(w, h) })
+      el.attr('icon/text', '')
+    } else {
+      el.attr('glyph/opacity', 0)
+      el.attr('icon/text', el.get('icon') || '')
+    }
   }
   const beh = el.get('behavior')
   if (beh === 'onoff' || beh === 'openclose') {
@@ -310,7 +321,11 @@ function makeCustom(def, x, y) {
   const el = new Custom({
     position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
     attrs: { name: { text: nextName(def.label || 'Custom') } },
-    shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
+    shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', svgBody: def.svg || '',
+    svgVB: def.svgVB || (def.svg ? parseSvgVB(def.svg) : null),
+    // older AI defs saved before levelZone existed get an approximate centered zone
+    levelZone: def.levelZone || (def.behavior === 'level' && def.svg ? { x: 0.2, y: 0.15, w: 0.6, h: 0.7 } : null),
+    fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
     behavior: def.behavior || 'static', vmin: def.vmin ?? 0, vmax: def.vmax ?? 100, unit: def.unit || '',
     on: true, open: true, level: 60, value: ((def.vmin ?? 0) + (def.vmax ?? 100)) / 2,
     ports: portsCfg(customSidePorts(def, w, h), true),
@@ -348,22 +363,85 @@ const AI_COMP_SYSTEM = `You design components for an industrial/water SCADA scre
 
 Field semantics:
 - label: short display name (max ~18 chars).
-- shape: body outline. cylinder suits vessels/tanks, circle suits pumps/blowers/instruments, diamond suits valves, triangle suits hoppers/funnels, box is the general default.
-- color/border: hex colors that read well on a light canvas; pick hues that hint at the medium (blue=water, green=chemical ok, amber=power/heat, slate=mechanical).
-- w/h: px, keep within 60-180 x 40-140 unless the part is clearly large (vessel) or small (sensor).
+- shape: fallback body outline, only shown if svg is empty. cylinder=vessels, circle=pumps/instruments, diamond=valves, box=default.
+- color/border: hex colors; border is also used for the selection outline.
+- w/h: px, keep within 60-200 x 40-160 unless the part is clearly large (vessel) or small (sensor).
 - behavior: onoff for powered equipment that starts/stops (gates flow when off), openclose for valves/gates, level for vessels that fill/drain (shows %), meter for instruments showing a live value, static for passive parts.
 - vmin/vmax/unit: sensible range + engineering unit for meter (e.g. 0-10 bar, 0-14 pH, 0-200 m3/h). For level use 0-100. Otherwise 0/100 and empty unit.
 - sides: ports where pipes connect. Inline equipment: left+right. Vessels: top+bottom. Sensors that tap a line: bottom or left only.
-- glyph: a single SVG path "d" string drawn in a 24x24 box — simple line-art like P&ID symbols, stroke-only (never filled), 2px stroke look. Example pump glyph: "M7,8 A5,5 0 1,0 17,8 A5,5 0 1,0 7,8 M8,8 L15,8 M12,5 L15,8 L12,11 M4,18 L20,18". Prefer a glyph; set icon to a fallback emoji anyway.
+- svg: THE MAIN VISUAL — a complete, realistic SVG drawing of the part, professional HMI-symbol style. Requirements:
+  * starts with <svg viewBox="0 0 W H" xmlns="http://www.w3.org/2000/svg"> where W:H matches w:h; no width/height attributes.
+  * realistic industrial look: metallic 3D shading via linearGradient/radialGradient (steel greys tinted toward the medium: blue=water, green=chemical, amber=power/heat), highlights, darker base shadow, physical details (flanges, bolts, pipe stubs, casing ribs, sight glass) where natural.
+  * flat cartoon boxes are NOT acceptable; draw the actual equipment silhouette.
+  * self-contained: no text, no <script>, no external hrefs/images, defs ids short and unique-ish (e.g. "g1","g2").
+  * keep under 3500 characters.
+  Example of the expected style (a metal centrifugal pump — use as quality reference, do not copy blindly):
+  <svg viewBox="0 0 96 60" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2f6"/><stop offset=".45" stop-color="#a8b4c0"/><stop offset="1" stop-color="#5d6b79"/></linearGradient><radialGradient id="g2" cx=".35" cy=".35" r=".8"><stop offset="0" stop-color="#dfe7ee"/><stop offset=".7" stop-color="#8b98a6"/><stop offset="1" stop-color="#4d5a68"/></radialGradient></defs><rect x="6" y="46" width="84" height="8" rx="2" fill="url(#g1)" stroke="#3f4a55" stroke-width="1"/><rect x="58" y="14" width="30" height="24" rx="3" fill="url(#g1)" stroke="#3f4a55"/><circle cx="30" cy="30" r="18" fill="url(#g2)" stroke="#3f4a55" stroke-width="1.2"/><circle cx="30" cy="30" r="7" fill="#37424e"/><rect x="26" y="4" width="8" height="10" fill="url(#g1)" stroke="#3f4a55"/><rect x="22" y="2" width="16" height="4" rx="1" fill="#6d7a88" stroke="#3f4a55"/></svg>
+- levelZone: only for behavior="level": the rectangle IN THE SAME viewBox UNITS as svg that covers the vessel's liquid interior — a translucent green fill animates bottom-up inside exactly this region at runtime. Draw that interior area light/semi-transparent (like a sight glass or open vessel window) so the fill reads as liquid. Region must sit fully inside the vessel walls. For other behaviors use {"x":0,"y":0,"w":0,"h":0}.
+- glyph: leave "" (legacy field).
+- icon: one fallback emoji.
 
 Respond with ONLY one JSON object — no markdown fences, no commentary — with exactly these keys:
-{"label": string, "shape": "box"|"circle"|"diamond"|"triangle"|"cylinder", "icon": string (one emoji), "color": "#rrggbb", "border": "#rrggbb", "w": integer, "h": integer, "behavior": "static"|"onoff"|"openclose"|"level"|"meter", "vmin": number, "vmax": number, "unit": string, "sides": {"top": boolean, "bottom": boolean, "left": boolean, "right": boolean}, "glyph": string}`
+{"label": string, "shape": "box"|"circle"|"diamond"|"triangle"|"cylinder", "icon": string (one emoji), "color": "#rrggbb", "border": "#rrggbb", "w": integer, "h": integer, "behavior": "static"|"onoff"|"openclose"|"level"|"meter", "vmin": number, "vmax": number, "unit": string, "sides": {"top": boolean, "bottom": boolean, "left": boolean, "right": boolean}, "svg": string, "levelZone": {"x": number, "y": number, "w": number, "h": number}, "glyph": string}`
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-4.5'
+const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-5'
 const aiComp = reactive({ open: false, prompt: '', loading: false, error: '', result: null })
 function openAiComp() { aiComp.open = true; aiComp.error = '' }
+const AI_EXAMPLES = [
+  'Stainless steel storage tank with level',
+  'Centrifugal pump with motor, on/off',
+  'Motorized butterfly valve, open/close',
+  'Electromagnetic flow meter 0–500 m³/h',
+  'Chlorine dosing tank with level',
+  'UV disinfection unit, on/off',
+]
+// pull the first balanced JSON object out of model text (reasoning models wrap it in <think> blocks / prose)
+function extractJson(text) {
+  const t = String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '')
+  const start = t.indexOf('{')
+  if (start === -1) return null
+  let depth = 0, inStr = false, esc = false
+  for (let i = start; i < t.length; i++) {
+    const c = t[i]
+    if (esc) { esc = false; continue }
+    if (c === '\\') { esc = inStr; continue }
+    if (c === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (c === '{') depth++
+    else if (c === '}') { depth--; if (!depth) { try { return JSON.parse(t.slice(start, i + 1)) } catch { return null } } }
+  }
+  return null
+}
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 const GLYPH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9,.\s+-]*$/ // path-data chars only — keeps arbitrary SVG/script out
+// scrub AI SVG before storing: drop script-capable nodes, event handlers, and external references.
+// (Rendered as a data-URI <image>, browsers already refuse scripts/external loads there — this is defense in depth.)
+function sanitizeSvg(raw) {
+  const s = String(raw || '').trim()
+  if (!/^<svg[\s>]/i.test(s) || s.length > 20000) return ''
+  let doc
+  try { doc = new DOMParser().parseFromString(s, 'image/svg+xml') } catch { return '' }
+  if (doc.querySelector('parsererror')) return ''
+  const root = doc.documentElement
+  if (root.nodeName.toLowerCase() !== 'svg') return ''
+  doc.querySelectorAll('script,foreignObject,iframe,embed,object,audio,video').forEach(n => n.remove())
+  for (const el of doc.querySelectorAll('*')) {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase(), v = a.value
+      if (n.startsWith('on')) el.removeAttribute(a.name)
+      else if ((n === 'href' || n === 'xlink:href') && !v.trim().startsWith('#')) el.removeAttribute(a.name)
+      else if (n === 'style' && /url\s*\(/i.test(v) && !/url\s*\(\s*['"]?#/i.test(v)) el.removeAttribute(a.name)
+    }
+  }
+  if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 96 60')
+  root.removeAttribute('width'); root.removeAttribute('height')
+  return new XMLSerializer().serializeToString(root)
+}
+function svgDataUri(svg) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) }
+function parseSvgVB(svg) {
+  const vb = /viewBox\s*=\s*"([-\d.\s]+)"/.exec(svg || '')?.[1].trim().split(/\s+/).map(Number)
+  return vb?.length === 4 && vb[2] > 0 && vb[3] > 0 ? { w: vb[2], h: vb[3] } : null
+}
 function normalizeAiComp(d) {
   const clamp = (n, lo, hi, def) => Number.isFinite(+n) ? Math.min(hi, Math.max(lo, +n)) : def
   const sides = { top: !!d.sides?.top, bottom: !!d.sides?.bottom, left: !!d.sides?.left, right: !!d.sides?.right }
@@ -371,6 +449,21 @@ function normalizeAiComp(d) {
   const behavior = ['static', 'onoff', 'openclose', 'level', 'meter'].includes(d.behavior) ? d.behavior : 'static'
   let vmin = clamp(d.vmin, -1e6, 1e6, 0), vmax = clamp(d.vmax, -1e6, 1e6, 100)
   if (vmax <= vmin) { vmin = 0; vmax = 100 }
+  const svg = sanitizeSvg(d.svg)
+  const svgVB = parseSvgVB(svg)
+  // liquid interior for level parts, stored as 0..1 fractions of the drawing (viewBox units → fractions)
+  let levelZone = null
+  if (svg && behavior === 'level') {
+    const z = d.levelZone || {}
+    if (svgVB && [z.x, z.y, z.w, z.h].every(Number.isFinite) && z.w > 0 && z.h > 0) {
+      levelZone = {
+        x: clamp(z.x / svgVB.w, 0, 0.95, 0.2),
+        y: clamp(z.y / svgVB.h, 0, 0.95, 0.15),
+        w: clamp(z.w / svgVB.w, 0.05, 1, 0.6),
+        h: clamp(z.h / svgVB.h, 0.05, 1, 0.7),
+      }
+    } else levelZone = { x: 0.2, y: 0.15, w: 0.6, h: 0.7 }
+  }
   return {
     label: String(d.label || 'AI Part').slice(0, 24),
     shape: ['box', 'circle', 'diamond', 'triangle', 'cylinder'].includes(d.shape) ? d.shape : 'box',
@@ -379,6 +472,7 @@ function normalizeAiComp(d) {
     border: HEX_RE.test(d.border) ? d.border : '#6366f1',
     w: clamp(d.w, 40, 260, 96), h: clamp(d.h, 30, 240, 60),
     behavior, vmin, vmax, unit: String(d.unit || '').slice(0, 8), sides,
+    svg, svgVB, levelZone,
     glyph: GLYPH_RE.test(d.glyph || '') ? String(d.glyph || '').slice(0, 1200) : '',
   }
 }
@@ -394,7 +488,7 @@ async function generateAiComp() {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: AI_MODEL,
-        max_tokens: 2048,
+        max_tokens: 16000, // reasoning models spend thousands of tokens thinking before the JSON appears
         messages: [
           { role: 'system', content: AI_COMP_SYSTEM },
           { role: 'user', content: prompt },
@@ -408,11 +502,16 @@ async function generateAiComp() {
       throw err
     }
     const data = await r.json()
-    let text = (data?.choices?.[0]?.message?.content || '').trim()
-    // tolerate models that wrap JSON in ``` fences or add prose around it
-    const a = text.indexOf('{'), b = text.lastIndexOf('}')
-    if (a === -1 || b <= a) throw new Error('Model returned no JSON — retry or set a stronger model via VITE_OPENROUTER_MODEL.')
-    aiComp.result = normalizeAiComp(JSON.parse(text.slice(a, b + 1)))
+    const choice = data?.choices?.[0] || {}
+    const msg = choice.message || {}
+    // reasoning models may leave content empty and put text in message.reasoning; JSON can sit in either
+    const parsed = extractJson(msg.content) || extractJson(msg.reasoning)
+    if (!parsed) {
+      throw new Error(choice.finish_reason === 'length'
+        ? 'Model ran out of tokens while thinking — Regenerate, or switch to a stronger model via VITE_OPENROUTER_MODEL.'
+        : `Model "${AI_MODEL}" returned no valid JSON — Regenerate, or set a stronger model via VITE_OPENROUTER_MODEL.`)
+    }
+    aiComp.result = normalizeAiComp(parsed)
   } catch (err) {
     aiComp.result = null
     aiComp.error = err?.status === 401 ? 'API key rejected (401). Check VITE_OPENROUTER_API_KEY.'
@@ -447,6 +546,55 @@ const sel = reactive({
 })
 const tagList = TAGS
 function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
+
+// --- per-element cursor resize (bottom-right drag handle on the selected element) ---
+// Fixed-art shapes (SCALE_BASE) scale uniformly via their 'sc' group; calc-drawn shapes
+// (Custom/AI, Note, Zone, Chart, Quality box types excluded) resize freely.
+const ResizeTool = joint.elementTools.Control.extend({
+  children: [{
+    tagName: 'rect', selector: 'handle',
+    attributes: { width: 11, height: 11, x: -5.5, y: -5.5, rx: 2, fill: '#6366f1', stroke: '#ffffff', 'stroke-width': 1.5, cursor: 'nwse-resize' },
+  }],
+  getPosition(view) { const s = view.model.size(); return { x: s.width, y: s.height } },
+  setPosition(view, coordinates) { resizeElTo(view.model, coordinates.x, coordinates.y) },
+})
+function resizeElTo(m, w, h) {
+  const t = m.get('type')
+  if (t === 's.Control') return // invisible anchor — its HTML overlay has no meaningful size
+  const old = m.size()
+  const base = SCALE_BASE[t]
+  let nw, nh
+  if (base) {
+    // uniform scale for fixed-art shapes
+    const s = Math.max(0.4, Math.min(4, Math.max(w / base.w, h / base.h)))
+    nw = base.w * s; nh = base.h * s
+    m.set('scale', s)
+    m.resize(nw, nh)
+    applyScale(m)
+  } else {
+    nw = Math.max(30, w); nh = Math.max(24, h)
+    m.resize(nw, nh)
+    if (t === 's.Custom') renderCustom(m)
+  }
+  // keep absolute-positioned ports proportionally attached
+  const fx = nw / old.width, fy = nh / old.height
+  if (fx !== 1 || fy !== 1) {
+    m.getPorts().forEach(p => {
+      const a = p.args || {}
+      if (typeof a.x === 'number') m.portProp(p.id, 'args/x', a.x * fx)
+      if (typeof a.y === 'number') m.portProp(p.id, 'args/y', a.y * fy)
+    })
+  }
+  if (sel.id === m.id) { sel.w = Math.round(nw); sel.h = Math.round(nh) }
+}
+let resizeToolView = null
+function syncResizeTool(model) {
+  if (resizeToolView) { try { resizeToolView.removeTools() } catch { /* view may be gone */ } resizeToolView = null }
+  if (!model || mode.value !== 'edit' || model.get('type') === 's.Control' || model.get('locked')) return
+  const v = model.findView(paper); if (!v) return
+  v.addTools(new joint.dia.ToolsView({ tools: [new ResizeTool()] }))
+  resizeToolView = v
+}
 
 // --- geometry / z-order / lock ---
 function applyPos() { const m = selModel(); if (!m) return; const x = Number(sel.x), y = Number(sel.y); if (Number.isNaN(x) || Number.isNaN(y)) return; m.position(x, y) }
@@ -545,6 +693,7 @@ function updateSelInfo() {
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
   linkSel.id = null // element (or blank) selection clears any pipe selection
+  syncResizeTool(model)
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
@@ -896,7 +1045,7 @@ function stopSim() {
     else if (t === 's.Tap') { e.set('pressure', 0); e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
   })
 }
-watch(mode, m => { linkSel.id = null; if (m === 'run') startSim(); else stopSim() })
+watch(mode, m => { linkSel.id = null; syncResizeTool(m === 'edit' ? selModel() : null); if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
@@ -1136,39 +1285,57 @@ onUnmounted(() => {
     </div>
 
     <!-- new custom component -->
-    <!-- AI component generator -->
-    <div v-if="aiComp.open" class="fsmodal" @click.self="aiComp.open = false">
-      <div class="dlg">
-        <div class="fshead"><b><Sparkles :size="15" style="vertical-align:-2px" /> AI component</b><button @click="aiComp.open = false"><X :size="15" /></button></div>
-        <div class="dlgbody">
-          <textarea v-model="aiComp.prompt" rows="3" :disabled="aiComp.loading"
-                    placeholder="e.g. a chlorine dosing pump with on/off state, or a UV disinfection unit, or a pressure sensor reading 0–10 bar"
-                    @keydown.enter.exact.prevent="generateAiComp"></textarea>
-          <div class="hint">Describe any plant part. AI maps it to this builder's component JSON — shape, colors, ports, live behavior, symbol — and it lands in “My Components”.</div>
-          <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
-          <div v-if="aiComp.result" class="aiprev">
-            <svg class="aiprevsvg" :viewBox="'-2 -2 ' + (aiComp.result.w + 4) + ' ' + (aiComp.result.h + 4)">
-              <rect v-if="aiComp.result.shape === 'box'" :width="aiComp.result.w" :height="aiComp.result.h" rx="8" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <ellipse v-else-if="aiComp.result.shape === 'circle'" :cx="aiComp.result.w / 2" :cy="aiComp.result.h / 2" :rx="aiComp.result.w / 2" :ry="aiComp.result.h / 2" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <path v-else :d="customPath(aiComp.result.shape, aiComp.result.w, aiComp.result.h)" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <path v-if="aiComp.result.glyph" :d="aiComp.result.glyph" fill="none" :stroke="aiComp.result.border" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :transform="aiGlyphTransform(aiComp.result)" />
-              <text v-else-if="aiComp.result.icon" :x="aiComp.result.w / 2" :y="aiComp.result.h / 2" text-anchor="middle" dominant-baseline="central" font-size="20">{{ aiComp.result.icon }}</text>
-            </svg>
+    <!-- AI component generator (right slide-in panel — canvas stays visible) -->
+    <aside v-if="aiComp.open" class="aipanel">
+      <div class="aihead">
+        <span class="aihead-ic"><Sparkles :size="16" /></span>
+        <div class="aihead-t"><b>AI Component</b><span>Describe a part — get a realistic live component</span></div>
+        <button class="aiclose" @click="aiComp.open = false"><X :size="15" /></button>
+      </div>
+      <div class="aipanelbody">
+        <div class="ailabel">Describe your component</div>
+        <textarea v-model="aiComp.prompt" rows="4" class="aita" :disabled="aiComp.loading"
+                  placeholder="e.g. a chlorine dosing pump with on/off state, or a pressure sensor reading 0–10 bar"
+                  @keydown.enter.exact.prevent="generateAiComp"></textarea>
+        <template v-if="!aiComp.result && !aiComp.loading">
+          <div class="ailabel">Try one of these</div>
+          <div class="aichips">
+            <button v-for="ex in AI_EXAMPLES" :key="ex" class="aichip" @click="aiComp.prompt = ex">{{ ex }}</button>
+          </div>
+        </template>
+        <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
+        <div v-if="aiComp.loading" class="aiload"><span class="aispin"></span> Generating component…</div>
+        <template v-if="aiComp.result">
+          <div class="ailabel">Preview</div>
+          <div class="aiprev">
+            <div class="aiprevstage">
+              <img v-if="aiComp.result.svg" class="aiprevsvg" :src="svgDataUri(aiComp.result.svg)" alt="">
+              <svg v-else class="aiprevsvg" :viewBox="'-2 -2 ' + (aiComp.result.w + 4) + ' ' + (aiComp.result.h + 4)">
+                <rect v-if="aiComp.result.shape === 'box'" :width="aiComp.result.w" :height="aiComp.result.h" rx="8" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <ellipse v-else-if="aiComp.result.shape === 'circle'" :cx="aiComp.result.w / 2" :cy="aiComp.result.h / 2" :rx="aiComp.result.w / 2" :ry="aiComp.result.h / 2" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <path v-else :d="customPath(aiComp.result.shape, aiComp.result.w, aiComp.result.h)" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <path v-if="aiComp.result.glyph" :d="aiComp.result.glyph" fill="none" :stroke="aiComp.result.border" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :transform="aiGlyphTransform(aiComp.result)" />
+                <text v-else-if="aiComp.result.icon" :x="aiComp.result.w / 2" :y="aiComp.result.h / 2" text-anchor="middle" dominant-baseline="central" font-size="20">{{ aiComp.result.icon }}</text>
+              </svg>
+            </div>
             <div class="aiprevmeta">
               <b>{{ aiComp.result.label }}</b>
-              <span>{{ aiComp.result.shape }} · {{ aiComp.result.behavior }}<template v-if="aiComp.result.behavior === 'meter'"> · {{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</template></span>
-              <span>ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
+              <div class="aitags">
+                <span class="aitag">{{ aiComp.result.behavior }}</span>
+                <span v-if="aiComp.result.behavior === 'meter'" class="aitag">{{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</span>
+                <span class="aitag">ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
+              </div>
             </div>
           </div>
-          <div class="frow">
-            <button class="primary" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
-              <Sparkles :size="14" style="vertical-align:-2px" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
-            </button>
-            <button v-if="aiComp.result" class="primary" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" style="vertical-align:-2px" /> Add to My Components</button>
-          </div>
+        </template>
+        <div class="aiactions">
+          <button class="aigen" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
+            <Sparkles :size="14" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
+          </button>
+          <button v-if="aiComp.result" class="aiadd" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" /> Add to My Components</button>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- in-app confirm / alert / prompt dialog -->
     <div v-if="dlg.open" class="fsmodal" @click.self="dlgCancel">
@@ -1353,11 +1520,40 @@ onUnmounted(() => {
 .toolbar button.ai { background: var(--accent); color: #fff; padding: 6px 12px; }
 .toolbar button.ai:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: #fff; }
 .toolbar button.ai:disabled { opacity: .5; cursor: not-allowed; }
-.aierr { font-size: 12px; font-weight: 600; color: #dc2626; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25); border-radius: var(--r-md); padding: 8px 10px; }
-.aiprev { display: flex; align-items: center; gap: 14px; border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; background: var(--surface-2); }
-.aiprevsvg { flex: none; max-width: 130px; max-height: 90px; }
-.aiprevmeta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+.aipanel { position: fixed; top: 0; right: 0; bottom: 0; width: 360px; max-width: 94vw; z-index: 900; background: var(--surface-elevated); border-left: 1px solid var(--border); box-shadow: var(--shadow-modal); display: flex; flex-direction: column; animation: aislide .22s cubic-bezier(.2,.8,.25,1); }
+@keyframes aislide { from { transform: translateX(100%); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
+.aihead { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.aihead-ic { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: #fff; }
+.aihead-t { display: flex; flex-direction: column; min-width: 0; }
+.aihead-t b { font-size: 14px; color: var(--text); }
+.aihead-t span { font-size: 11px; color: var(--muted); }
+.aiclose { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.aiclose:hover { background: var(--surface-2); color: var(--text); }
+.aipanelbody { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.ailabel { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.aita { width: 100%; resize: vertical; font: inherit; font-size: 13px; line-height: 1.45; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+.aita:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.aichips { display: flex; flex-wrap: wrap; gap: 6px; }
+.aichip { font-size: 11.5px; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; transition: all .15s ease; text-align: left; }
+.aichip:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.aierr { font-size: 12px; font-weight: 600; color: #dc2626; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25); border-radius: var(--r-md); padding: 9px 11px; }
+.aiload { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 10px 2px; }
+.aispin { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: aispin .7s linear infinite; }
+@keyframes aispin { to { transform: rotate(360deg); } }
+.aiprev { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
+.aiprevstage { display: grid; place-items: center; padding: 16px; min-height: 110px; background:
+  repeating-conic-gradient(color-mix(in srgb, var(--border) 40%, transparent) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px; }
+.aiprevsvg { max-width: 200px; max-height: 130px; filter: drop-shadow(0 2px 5px rgba(15,23,42,.25)); }
+.aiprevmeta { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .aiprevmeta b { color: var(--text); font-size: 13px; }
+.aitags { display: flex; flex-wrap: wrap; gap: 5px; }
+.aitag { font-size: 10.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 5px; padding: 3px 7px; }
+.aiactions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 8px; }
+.aigen, .aiadd { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; font-size: 13px; font-weight: 700; border-radius: var(--r-md); padding: 10px 12px; cursor: pointer; transition: filter .15s ease; }
+.aigen { background: var(--accent); color: #fff; }
+.aigen:hover:not(:disabled), .aiadd:hover:not(:disabled) { filter: brightness(1.07); }
+.aigen:disabled, .aiadd:disabled { opacity: .5; cursor: not-allowed; }
+.aiadd { background: #16a34a; color: #fff; }
 
 /* ---------- responsive: palette/inspector become off-canvas drawers ---------- */
 .drawer-toggle { display: none; }
