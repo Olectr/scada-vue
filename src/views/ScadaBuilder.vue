@@ -3,10 +3,12 @@ import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, SCALE_BASE, applyScale } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
+import { PID_DEFS } from '../scada/pidSymbols'
 import TrendChart from '../components/TrendChart.vue'
 import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
+const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
 // metric key(s) each instrument preset exposes for external panel/DER/param linkage (see defaultMetrics)
 const INSTRUMENT_METRIC_KEYS = { manualValve: ['open'], nrv: ['open'], pressureTransmitter: ['pressure'], instValve: ['open'], turbidity: ['turbidity'], flowTransmitter: ['flow', 'total'], radarLevel: ['level'], chlorineAnalyzer: ['chlorine'], hydrostaticLevel: ['level'] }
 
@@ -1105,6 +1107,10 @@ onUnmounted(() => {
         <div class="ptitle">Components</div>
         <button v-for="p in palette" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
           <component :is="p.icon || PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
+        </button>
+        <div class="ptitle" style="margin-top:14px">P&amp;ID Symbols</div>
+        <button v-for="pd in PID_DEFS" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
+          <component :is="PID_PALETTE_ICON[pd.key] || Shapes" :size="16" class="ico" /> {{ pd.label }}
         </button>
         <div class="ptitle" style="margin-top:14px">My Components</div>
         <div v-for="c in customComps" :key="c.id" class="customrow">
