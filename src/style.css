@@ -34,7 +34,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: 56px 1fr 28px;
+  grid-template-rows: 92px 1fr 28px;
   height: 100vh
 }
 
@@ -62,7 +62,7 @@ body {
 }
 
 .topbar-logo {
-  height: 42px;
+  height: 80px;
   width: auto;
   display: block
 }

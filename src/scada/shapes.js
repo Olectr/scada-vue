@@ -22,36 +22,26 @@ export function arc(frac) {
   return `M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1}`
 }
 
-// Tank-1 level scale 0..100 every 10
-const WIN_Y = 36, WIN_H = 178
-const scaleNodes = []
-for (let v = 0; v <= 100; v += 10) {
-  const y = WIN_Y + WIN_H * (1 - v / 100)
-  scaleNodes.push({ tagName: 'line', attributes: { x1: 78, y1: y, x2: 86, y2: y, stroke: '#475569', 'stroke-width': 1.2 } })
-  scaleNodes.push({ tagName: 'text', attributes: { x: 90, y: y + 4, fill: '#1f2d3d', 'font-size': 10, 'font-weight': 'bold' }, textContent: String(v) })
-}
-
 // NOTE (resizable components): shapes listed in SCALE_BASE below draw their art in fixed
 // base-size coordinates inside a 'sc' wrapper group; resizing applies scale() on that group.
 // Keep their attrs absolute (no calc()) or the art double-scales.
+//
+// Fill window stays at y:36 h:178 — simulate.js's tank() computes fill/y and
+// fill/height directly against these numbers, so this geometry must not move.
 export const CylTank = joint.dia.Element.define('s.Cyl', { size: { width: 150, height: 250 }, attrs: {
-  body: { x: 0, y: 0, width: 150, height: 250, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
-  capBot: { cx: 75, cy: 250, rx: 75, ry: 13, fill: STEEL, stroke: '#7c858f' },
-  capTop: { cx: 75, cy: 0, rx: 75, ry: 13, fill: SILVER, stroke: '#7c858f' },
-  win: { x: 44, y: 36, width: 32, height: 178, fill: '#d7dbe4', stroke: '#6b7280', strokeWidth: 1, rx: 2 },
-  fill: { x: 46, width: 28, fill: '#16a34a' },
+  body: { x: 30, y: 4, width: 90, height: 242, rx: 14, fill: 'none', stroke: '#e6edf3', strokeWidth: 1.5 },
+  win: { x: 34, y: 36, width: 82, height: 178, fill: '#3a4456', stroke: 'none' },
+  fill: { x: 34, width: 82, fill: '#8b93f5' },
+  valText: { x: 75, textAnchor: 'middle', fill: '#e6edf3', fontSize: 20, fontWeight: 'bold' },
   // sim-range markers on the scale (stroke set by the builder via setTankMarks; hidden by default so other screens are unaffected)
-  markLo: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
-  markHi: { x1: 42, y1: 36, x2: 78, y2: 36, stroke: 'none', strokeWidth: 2 },
-  name: { x: 75, y: 280, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
-  legL: { d: 'M 32 250 l -8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
-  legR: { d: 'M 118 250 l 8 28', stroke: '#5b3a26', strokeWidth: 6, strokeLinecap: 'round' },
+  markLo: { x1: 30, y1: 36, x2: 120, y2: 36, stroke: 'none', strokeWidth: 2 },
+  markHi: { x1: 30, y1: 36, x2: 120, y2: 36, stroke: 'none', strokeWidth: 2 },
+  name: { x: 75, y: -10, textAnchor: 'middle', fill: '#e6edf3', fontSize: 14, fontWeight: 'bold' },
 } }, { markup: [
-  { tagName: 'path', selector: 'legL' }, { tagName: 'path', selector: 'legR' },
-  { tagName: 'rect', selector: 'body' }, { tagName: 'ellipse', selector: 'capBot' }, { tagName: 'ellipse', selector: 'capTop' },
-  { tagName: 'rect', selector: 'win' }, { tagName: 'rect', selector: 'fill' },
+  { tagName: 'rect', selector: 'body' }, { tagName: 'rect', selector: 'win' }, { tagName: 'rect', selector: 'fill' },
+  { tagName: 'text', selector: 'valText' },
   { tagName: 'line', selector: 'markLo' }, { tagName: 'line', selector: 'markHi' },
-  ...scaleNodes, { tagName: 'text', selector: 'name' },
+  { tagName: 'text', selector: 'name' },
 ] })
 
 export const Hopper = joint.dia.Element.define('s.Hopper', { size: { width: 170, height: 230 }, attrs: {
@@ -63,21 +53,23 @@ export const Hopper = joint.dia.Element.define('s.Hopper', { size: { width: 170,
   name: { x: 85, y: -6, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 14, fontWeight: 'bold' },
 } }, { markup: svg`<path @selector="cone"/><rect @selector="outlet"/><rect @selector="cyl"/><rect @selector="fill"/><ellipse @selector="capTop"/><text @selector="name"/>` })
 
+// inner/fill and imp/class are driven live by setPumpVisual()/pump() in simulate.js
+// (on/off color + spin animation) — selector names must stay 'inner' and 'imp'.
 export const Pump = joint.dia.Element.define('s.Pump', { size: { width: 92, height: 92 }, attrs: {
-  ring: { cx: 46, cy: 46, r: 45, fill: SILVER, stroke: '#7c858f', strokeWidth: 1, cursor: 'pointer' },
-  inner: { cx: 46, cy: 46, r: 33, fill: '#8b949e', stroke: '#5b6772', cursor: 'pointer' },
-  imp: { d: 'M46 46 L46 12 Q64 18 60 40 Z M46 46 L80 46 Q74 64 52 60 Z M46 46 L46 80 Q28 74 32 52 Z M46 46 L12 46 Q18 28 40 32 Z', fill: '#3b434c', cursor: 'pointer' },
-  hub: { cx: 46, cy: 46, r: 6, fill: '#11151a' },
-  name: { x: 46, y: 112, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
-} }, { markup: svg`<circle @selector="ring"/><circle @selector="inner"/><path @selector="imp"/><circle @selector="hub"/><text @selector="name"/>` })
+  tile: { x: 4, y: 4, width: 84, height: 84, rx: 10, fill: '#101d2c', stroke: '#e6edf3', strokeWidth: 1.5, cursor: 'pointer' },
+  inner: { cx: 46, cy: 46, r: 26, fill: '#8b949e', cursor: 'pointer' },
+  imp: { d: 'M46 46 L46 24 Q56 27 54 38 Z M46 46 L68 46 Q65 56 54 54 Z M46 46 L46 68 Q36 65 38 54 Z M46 46 L24 46 Q27 36 38 38 Z', fill: '#101d2c', cursor: 'pointer' },
+  hub: { cx: 46, cy: 46, r: 5, fill: '#0a1420', stroke: '#e6edf3', strokeWidth: 1 },
+  name: { x: 46, y: 112, textAnchor: 'middle', fill: '#e6edf3', fontSize: 13, fontWeight: 'bold' },
+} }, { markup: svg`<rect @selector="tile"/><circle @selector="inner"/><path @selector="imp"/><circle @selector="hub"/><text @selector="name"/>` })
 
+// ind/fill is driven live by setValveVisual()/valve() in simulate.js (open/closed color)
+// — selector name must stay 'ind'. Both bowtie triangles share the one selector so they
+// recolor together, exactly as the old single indicator rect did.
 export const Valve = joint.dia.Element.define('s.Valve', { size: { width: 76, height: 92 }, attrs: {
-  wheel: { cx: 38, cy: 14, rx: 30, ry: 13, fill: '#3b434c' },
-  stem: { x: 35, y: 14, width: 6, height: 30, fill: '#6b7682' },
-  body: { x: 8, y: 44, width: 60, height: 44, rx: 6, fill: SILVER, stroke: '#7c858f' },
-  ind: { x: 24, y: 54, width: 28, height: 24, fill: '#16a34a', stroke: '#0f7a35' },
-  name: { x: 38, y: 104, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 12 },
-} }, { markup: svg`<ellipse @selector="wheel"/><rect @selector="stem"/><rect @selector="body"/><rect @selector="ind"/><text @selector="name"/>` })
+  ind: { d: 'M 8 50 L 38 66 L 8 82 Z M 68 50 L 38 66 L 68 82 Z', fill: '#cbd5e1', stroke: '#0a1420', strokeWidth: 1.5, strokeLinejoin: 'round' },
+  name: { x: 38, y: 104, textAnchor: 'middle', fill: '#e6edf3', fontSize: 12 },
+} }, { markup: svg`<path @selector="ind"/><text @selector="name"/>` })
 
 export const Zone = joint.dia.Element.define('s.Zone', { size: { width: 110, height: 40 }, attrs: {
   flag: { d: 'M 14 0 L calc(w) 0 L calc(w) calc(h) L 14 calc(h) L 0 calc(h/2) Z', fill: '#fff', stroke: '#16a34a', strokeWidth: 2 },
@@ -141,9 +133,9 @@ export const Note = joint.dia.Element.define('s.Note', { size: { width: 150, hei
 // placing standard instrument symbols (valves, transmitters, sensors) on canvas.
 // One shape, many presets (see INSTRUMENT_DEFS) — mirrors the Custom-shape pattern.
 export const Instrument = joint.dia.Element.define('s.Instrument', { size: { width: 72, height: 88 }, attrs: {
-  tile: { x: 8, y: 0, width: 56, height: 56, rx: 8, fill: '#ffffff', stroke: '#94a3b8', strokeWidth: 1.5 },
-  glyph: { d: '', transform: 'translate(16.8,8.8) scale(1.6)', fill: 'none', stroke: '#334155', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
-  name: { x: 36, y: 72, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 11, fontWeight: 'bold' },
+  tile: { x: 8, y: 0, width: 56, height: 56, rx: 8, fill: '#101d2c', stroke: '#3b4b63', strokeWidth: 1.5 },
+  glyph: { d: '', transform: 'translate(16.8,8.8) scale(1.6)', fill: 'none', stroke: '#e6edf3', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+  name: { x: 36, y: 72, textAnchor: 'middle', fill: '#e6edf3', fontSize: 11, fontWeight: 'bold' },
 } }, { markup: svg`<rect @selector="tile"/><path @selector="glyph"/><text @selector="name"/>` })
 
 // Presets consumed by Instrument — each glyph is authored in a 24x24 box, positioned
@@ -169,27 +161,21 @@ export const INSTRUMENT_DEFS = [
     glyph: 'M12,2 L12,16 M8,4 L16,4 M9,8 L15,8 M12,16 A3,3 0 1,0 12.01,16 M9,22 L15,22' },
 ]
 
-// New: flow meter — inline turbine meter (flanged pipe + dial) with live m³/h below.
+// New: flow meter — flat dark value chip with live m³/h. 'val' text and 'rotor'
+// class are driven live by flowMeter() in simulate.js — selector names must stay.
 export const FlowMeter = joint.dia.Element.define('s.Flow', { size: { width: 84, height: 48 }, attrs: {
-  flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
-  pipe: { x: 6, y: 18, width: 72, height: 12, fill: SILVER, stroke: '#7c858f' },
-  flR: { x: 76, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
-  head: { cx: 42, cy: 18, r: 16, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
-  dial: { cx: 42, cy: 18, r: 12, fill: '#dff1f7', stroke: '#5b6772' },
-  rotor: { d: 'M42 18 L42 8 Q49 11 47 16 Z M42 18 L52 18 Q49 25 44 23 Z M42 18 L42 28 Q35 25 37 20 Z M42 18 L32 18 Q35 11 40 13 Z', fill: '#0e7490' },
-  val: { x: 42, y: 63, textAnchor: 'middle', fill: '#0e7490', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
-} }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><path @selector="rotor"/><text @selector="val"/>` })
+  box: { x: 0, y: 4, width: 84, height: 40, rx: 8, fill: '#101d2c', stroke: '#3b4b63', strokeWidth: 1.5 },
+  rotor: { x1: 74, y1: 12, x2: 74, y2: 20, stroke: '#2dd4bf', strokeWidth: 2, strokeLinecap: 'round' },
+  val: { x: 38, y: 28, textAnchor: 'middle', fill: '#e6edf3', fontSize: 13, fontWeight: 'bold', text: '0 m³/h' },
+} }, { markup: svg`<rect @selector="box"/><line @selector="rotor"/><text @selector="val"/>` })
 
-// New: pressure tap — inline pressure indicator (flanged pipe + dial) showing live bar.
+// New: pressure tap — flat dark value chip with live bar. 'pVal'/'val' text are
+// driven live by tap() in simulate.js — selector names must stay.
 export const Tap = joint.dia.Element.define('s.Tap', { size: { width: 84, height: 48 }, attrs: {
-  flL: { x: 0, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
-  pipe: { x: 6, y: 18, width: 72, height: 12, fill: SILVER, stroke: '#7c858f' },
-  flR: { x: 76, y: 13, width: 8, height: 22, fill: STEEL, stroke: '#7c858f' },
-  head: { cx: 42, cy: 16, r: 15, fill: SILVER, stroke: '#7c858f', strokeWidth: 1 },
-  dial: { cx: 42, cy: 16, r: 11, fill: '#fde8e8', stroke: '#5b6772' },
-  pVal: { x: 42, y: 20, textAnchor: 'middle', fill: '#b91c1c', fontSize: 10, fontWeight: 'bold', text: '0.0' },
-  val: { x: 42, y: 63, textAnchor: 'middle', fill: '#b91c1c', fontSize: 12, fontWeight: 'bold', text: '0.0 bar' },
-} }, { markup: svg`<rect @selector="flL"/><rect @selector="pipe"/><rect @selector="flR"/><circle @selector="head"/><circle @selector="dial"/><text @selector="pVal"/><text @selector="val"/>` })
+  box: { x: 0, y: 4, width: 84, height: 40, rx: 8, fill: '#101d2c', stroke: '#3b4b63', strokeWidth: 1.5 },
+  pVal: { x: 42, y: 19, textAnchor: 'middle', fill: '#94a3b8', fontSize: 9, fontWeight: 'bold', text: '0.0' },
+  val: { x: 42, y: 34, textAnchor: 'middle', fill: '#e6edf3', fontSize: 12, fontWeight: 'bold', text: '0.0 bar' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="pVal"/><text @selector="val"/>` })
 
 // New: water-quality analyzer — live pH / Turbidity / Cl / DO readout.
 export const Quality = joint.dia.Element.define('s.Quality', { size: { width: 156, height: 118 }, attrs: {
@@ -228,14 +214,17 @@ export function applyScale(el) {
   el.attr('sc/transform', 'scale(' + s + ')')
 }
 
-// New: flow pipe link — grey tube + green dashed flow in one interactive link.
+// New: flow pipe link — thin line always visible ('wrap') + a colored flow
+// overlay ('line') that simulate.js shows/hides + animates based on live flow
+// state (see refreshLinks in simulate.js — that on/off logic is unchanged here,
+// only the resting colors/widths were flattened to match the thin P&ID look).
 export const FlowPipe = joint.dia.Link.define('s.FlowPipe', {
   z: -2,
   router: { name: 'orthogonal' },
   connector: { name: 'rounded', args: { radius: 12 } },
   attrs: {
-    wrap: { connection: true, stroke: '#b6bdc6', strokeWidth: 13, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' },
-    line: { connection: true, stroke: '#16a34a', strokeWidth: 7, strokeLinecap: 'round', strokeDasharray: '12 12', fill: 'none', class: 'wp-flow' },
+    wrap: { connection: true, stroke: '#8fa0b3', strokeWidth: 6, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' },
+    line: { connection: true, stroke: '#16a34a', strokeWidth: 4, strokeLinecap: 'round', strokeDasharray: '12 12', fill: 'none', class: 'wp-flow' },
   },
 }, { markup: [
   { tagName: 'path', selector: 'wrap', attributes: { fill: 'none' } },

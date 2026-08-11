@@ -5,7 +5,9 @@ import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Ta
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
 import { PID_DEFS } from '../scada/pidSymbols'
 import TrendChart from '../components/TrendChart.vue'
-import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
+import { useAuth } from '../composables/useAuth'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Unlock, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints, Menu, Search, ChevronLeft, ChevronRight, Home, ShoppingBasket, MoreHorizontal } from 'lucide-vue-next'
+const { user, logout } = useAuth()
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
 const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
@@ -645,6 +647,12 @@ function liveFields(m) {
 }
 // pipe styling — separate selection for links (FlowPipe)
 const linkSel = reactive({ id: null, color: '#16a34a', width: 7 })
+const PIPE_PRESETS = [
+  { label: 'Default', color: '#c5cdd6' }, { label: 'Steam', color: '#ef4444' },
+  { label: 'Nitrogen', color: '#8b93f5' }, { label: 'Cooling water', color: '#22c55e' },
+  { label: 'Accent', color: '#f59e0b' },
+]
+function applyPipePreset(hex) { linkSel.color = hex; applyPipe() }
 function selectLink(m) {
   if (!m) { linkSel.id = null; return }
   selectEl(null)
@@ -931,13 +939,27 @@ function computeAlarms() {
 }
 
 // --- dark theme ---
-const dark = ref(false)
-watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0f172a' : '#ffffff' }) })
+const dark = ref(true)
+watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0a1420' : '#ffffff' }) })
 
 // --- tablet/mobile drawers for palette + inspector (desktop ignores these) ---
 const paletteOpen = ref(false)
 const inspectorOpen = ref(false)
 function closeDrawers() { paletteOpen.value = false; inspectorOpen.value = false }
+
+// --- app-shell chrome: left icon rail + top app bar (search/breadcrumb/menus) ---
+const railCollapsed = ref(false)
+const addMenuOpen = ref(false)
+const overflowOpen = ref(false)
+const paletteFilter = ref('')
+function closeChromeMenus() { addMenuOpen.value = false; overflowOpen.value = false }
+function toggleAddMenu() { addMenuOpen.value = !addMenuOpen.value; overflowOpen.value = false }
+function toggleOverflowMenu() { overflowOpen.value = !overflowOpen.value; addMenuOpen.value = false }
+function filteredByName(list, nameKey) {
+  const q = paletteFilter.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(x => String(x[nameKey] ?? '').toLowerCase().includes(q))
+}
 
 // --- export the diagram as a PNG image ---
 function exportPng() {
@@ -980,8 +1002,8 @@ onMounted(() => {
   graph = new joint.dia.Graph({}, { cellNamespace: joint.shapes })
   paper = new joint.dia.Paper({
     el: host.value, model: graph, width: STAGE_W, height: STAGE_H,
-    background: { color: '#ffffff' }, cellViewNamespace: joint.shapes, async: true,
-    gridSize: 10, drawGrid: { name: 'dot', args: { color: '#e2e8f0' } },
+    background: { color: '#0a1420' }, cellViewNamespace: joint.shapes, async: true,
+    gridSize: 10, drawGrid: { name: 'dot', args: { color: '#2a3d52' } },
     defaultConnectionPoint: { name: 'anchor' },
     // drawing from a pressure gauge makes a dashed instrument leader; otherwise a flow pipe
     defaultLink: (cellView) => (cellView && cellView.model && cellView.model.get('type') === 's.PG' ? new Leader() : new FlowPipe()),
@@ -1064,56 +1086,88 @@ onUnmounted(() => {
 
 <template>
   <div class="builder" :class="{ dark }">
-    <div class="toolbar">
-      <strong>SCADA Builder</strong>
-      <div class="tgroup">
-        <button title="New" @click="newLayout"><FilePlus2 :size="15" /></button>
-        <button title="Save" @click="saveLayout"><Save :size="15" /></button>
-        <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)">
-          <option value="">Load…</option>
-          <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
-        </select>
-        <button :disabled="!currentName" title="Delete layout" @click="deleteLayout"><Trash2 :size="15" /></button>
-      </div>
-      <div class="tgroup">
-        <button :disabled="!canUndo" title="Undo (⌘/Ctrl+Z)" @click="undo"><Undo2 :size="15" /></button>
-        <button :disabled="!canRedo" title="Redo (⌘/Ctrl+Shift+Z)" @click="redo"><Redo2 :size="15" /></button>
-        <button :disabled="!sel.id || mode === 'run'" title="Duplicate (⌘/Ctrl+D)" @click="duplicateSel"><Copy :size="15" /></button>
-      </div>
-      <div class="tgroup">
-        <button title="Export JSON" @click="exportJson"><Download :size="15" /></button>
-        <button title="Import JSON" @click="pickImport"><Upload :size="15" /></button>
-        <button title="Export PNG" @click="exportPng"><ImageIcon :size="15" /></button>
-        <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''">
-          <option value="">Template…</option>
-          <option value="water">Water Treatment</option>
-          <option value="dual">Dual Pump</option>
-        </select>
-        <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
-      </div>
-      <button class="ai" :disabled="mode === 'run'" @click="openAiComp"><Sparkles :size="15" /> AI Component</button>
-      <span class="sp"></span>
-      <button class="drawer-toggle" :class="{ on: paletteOpen }" title="Components" @click="paletteOpen = !paletteOpen; inspectorOpen = false"><PanelLeft :size="15" /></button>
-      <button class="drawer-toggle" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen; paletteOpen = false"><PanelRight :size="15" /></button>
-      <button class="iconbtn" :class="{ on: dark }" title="Dark mode" @click="dark = !dark"><Moon :size="15" /></button>
-      <div class="modeswitch">
-        <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
-        <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
-      </div>
-    </div>
-    <div class="drawer-backdrop" :class="{ show: paletteOpen || inspectorOpen }" @click="closeDrawers"></div>
-    <div class="cols">
+    <nav class="rail" :class="{ collapsed: railCollapsed }">
+      <img class="rail-logo" src="https://metrion.blr1.cdn.digitaloceanspaces.com/metrion-favicon.svg" alt="Metrion" />
+      <button class="rail-collapse" :title="railCollapsed ? 'Expand' : 'Collapse'" @click="railCollapsed = !railCollapsed">
+        <component :is="railCollapsed ? ChevronRight : ChevronLeft" :size="14" />
+      </button>
+      <span class="rail-sp"></span>
+      <button class="rail-icon" :disabled="mode === 'run'" title="AI Component" @click="openAiComp"><Sparkles :size="18" /></button>
+      <button v-if="user" class="rail-avatar" :title="(user.profile && user.profile.email) + ' — Logout'" @click="logout">
+        {{ ((user.profile && user.profile.email) || 'U')[0].toUpperCase() }}
+      </button>
+    </nav>
+    <div class="shell">
+      <header class="appbar">
+        <div class="appbar-row">
+          <button class="hb" title="Toggle menu" @click="railCollapsed = !railCollapsed"><Menu :size="18" /></button>
+          <label class="searchbox">
+            <Search :size="15" />
+            <input type="text" v-model="paletteFilter" placeholder="Search components…">
+          </label>
+          <span class="sp"></span>
+          <div class="menu-wrap">
+            <button class="pill" @click="toggleAddMenu"><Plus :size="14" /> Add</button>
+            <div v-if="addMenuOpen" class="dropdown" @click="addMenuOpen = false">
+              <button @click="newLayout"><FilePlus2 :size="14" /> New</button>
+              <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)" @click.stop>
+                <option value="">Load…</option>
+                <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
+              </select>
+              <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''" @click.stop>
+                <option value="">Template…</option>
+                <option value="water">Water Treatment</option>
+                <option value="dual">Dual Pump</option>
+              </select>
+            </div>
+          </div>
+          <div class="menu-wrap">
+            <button class="pill iconOnly" title="More" @click="toggleOverflowMenu"><MoreHorizontal :size="16" /></button>
+            <div v-if="overflowOpen" class="dropdown" @click="overflowOpen = false">
+              <button @click="saveLayout"><Save :size="14" /> Save</button>
+              <button :disabled="!currentName" @click="deleteLayout"><Trash2 :size="14" /> Delete layout</button>
+              <button :disabled="!canUndo" @click="undo"><Undo2 :size="14" /> Undo</button>
+              <button :disabled="!canRedo" @click="redo"><Redo2 :size="14" /> Redo</button>
+              <button :disabled="!sel.id || mode === 'run'" @click="duplicateSel"><Copy :size="14" /> Duplicate</button>
+              <button @click="exportJson"><Download :size="14" /> Export JSON</button>
+              <button @click="pickImport"><Upload :size="14" /> Import JSON</button>
+              <button @click="exportPng"><ImageIcon :size="14" /> Export PNG</button>
+              <button :class="{ on: dark }" @click="dark = !dark"><Moon :size="14" /> Dark mode</button>
+            </div>
+          </div>
+          <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
+          <button class="pill iconOnly" :class="{ on: paletteOpen }" title="Components" @click="paletteOpen = !paletteOpen; inspectorOpen = false"><ShoppingBasket :size="16" /></button>
+          <button class="pill iconOnly" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen; paletteOpen = false"><PanelRight :size="16" /></button>
+          <button class="pill iconOnly" :class="{ on: mode === 'run' }" :title="mode === 'run' ? 'Locked (Run mode) — click to unlock' : 'Unlocked (Edit mode) — click to lock'" @click="mode = mode === 'edit' ? 'run' : 'edit'">
+            <component :is="mode === 'run' ? LockIcon : Unlock" :size="16" />
+          </button>
+        </div>
+        <div class="crumb">
+          <Home :size="12" /> <span>Home</span> <ChevronRight :size="10" />
+          <span class="on">SCADA Builder</span>
+          <template v-if="currentName"><ChevronRight :size="10" /><span class="on">{{ currentName }}</span></template>
+        </div>
+        <div class="pagehead">
+          <h1>SCADA Builder</h1>
+          <div class="modeswitch">
+            <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
+            <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
+          </div>
+        </div>
+      </header>
+      <div class="drawer-backdrop" :class="{ show: paletteOpen || inspectorOpen }" @click="closeDrawers(); closeChromeMenus()"></div>
+      <div class="cols">
       <aside class="palette" :class="{ open: paletteOpen }">
         <div class="ptitle">Components</div>
-        <button v-for="p in palette" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
+        <button v-for="p in filteredByName(palette, 'label')" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
           <component :is="p.icon || PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
         </button>
         <div class="ptitle" style="margin-top:14px">P&amp;ID Symbols</div>
-        <button v-for="pd in PID_DEFS" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
+        <button v-for="pd in filteredByName(PID_DEFS, 'label')" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
           <component :is="PID_PALETTE_ICON[pd.key] || Shapes" :size="16" class="ico" /> {{ pd.label }}
         </button>
         <div class="ptitle" style="margin-top:14px">My Components</div>
-        <div v-for="c in customComps" :key="c.id" class="customrow">
+        <div v-for="c in filteredByName(customComps, 'label')" :key="c.id" class="customrow">
           <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
           <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
         </div>
@@ -1160,6 +1214,10 @@ onUnmounted(() => {
         <div class="ptitle">Inspector</div>
         <div v-if="linkSel.id" class="fields">
           <div class="tlabel">Pipe</div>
+          <div class="pipe-swatches">
+            <button v-for="p in PIPE_PRESETS" :key="p.color" class="swatch" :class="{ on: linkSel.color === p.color }"
+                    :style="{ background: p.color }" :title="p.label" @click="applyPipePreset(p.color)"></button>
+          </div>
           <label>Color
             <input type="color" v-model="linkSel.color" @input="applyPipe">
           </label>
@@ -1278,6 +1336,7 @@ onUnmounted(() => {
         </div>
       </aside>
     </div>
+    </div>
 
     <!-- fullscreen chart -->
     <div v-if="fsChart" class="fsmodal" @click.self="fsChart = null">
@@ -1371,7 +1430,7 @@ onUnmounted(() => {
   --r-sm: 0; --r-md: 0; --r-lg: 0;
   --shadow-modal: 0 8px 24px rgba(15,23,42,.25);
   --shadow-float: 0 4px 12px rgba(15,23,42,.10);
-  width: 100%; height: 100%; display: flex; flex-direction: column; color: var(--text);
+  width: 100%; height: 100%; display: flex; flex-direction: row; color: var(--text);
 }
 .builder.dark {
   --surface: #111827; --surface-2: #0b1220; --surface-elevated: #1e293b; --bar: #0f172a; --border: #3b4b63; --text: #e5e7eb; --muted: #94a3b8;
@@ -1381,6 +1440,44 @@ onUnmounted(() => {
 /* flat reset: neutralize native UA borders on form controls; each control
    below adds back an explicit border where it wants one */
 .builder button, .builder input, .builder select, .builder textarea { border: none; }
+
+/* left icon rail */
+.rail { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0; background: var(--bar); border-right: 1px solid var(--border); transition: width .15s ease; }
+.rail.collapsed { width: 0; padding: 14px 0; overflow: hidden; border-right: none; }
+.rail-logo { width: 28px; height: 28px; }
+.rail-collapse { width: 28px; height: 28px; display: grid; place-items: center; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; }
+.rail-collapse:hover { background: var(--surface-2); color: var(--text); }
+.rail-sp { flex: 1; }
+.rail-icon { width: 36px; height: 36px; display: grid; place-items: center; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--accent); cursor: pointer; }
+.rail-icon:hover:not(:disabled) { background: var(--accent-soft); }
+.rail-icon:disabled { opacity: .4; cursor: not-allowed; }
+.rail-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+/* app shell: appbar (search/breadcrumb/title) + canvas columns */
+.shell { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
+.appbar { flex: none; padding: 10px 16px 0; }
+.appbar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.hb { width: 32px; height: 32px; display: grid; place-items: center; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; }
+.hb:hover { background: var(--surface-2); color: var(--text); }
+.searchbox { display: flex; align-items: center; gap: 8px; width: 280px; max-width: 40vw; padding: 7px 12px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
+.searchbox input { flex: 1; min-width: 0; background: transparent; color: var(--text); font-size: 13px; }
+.searchbox input::placeholder { color: var(--muted); }
+.appbar-row .sp { flex: 1; }
+.menu-wrap { position: relative; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 8px 12px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
+.pill:hover { background: var(--surface-2); }
+.pill.iconOnly { padding: 8px; }
+.pill.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dropdown { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 180px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-float); }
+.dropdown button, .dropdown select { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 9px; font-size: 12px; font-weight: 600; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; }
+.dropdown button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.dropdown button:disabled { opacity: .4; cursor: not-allowed; }
+.dropdown button.on { background: var(--accent); color: #fff; }
+.dropdown select { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.crumb { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.crumb .on { color: var(--text); font-weight: 600; }
+.pagehead { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.pagehead h1 { flex: 1; min-width: 0; font-size: 19px; font-weight: 700; color: var(--text); }
 .toolbar { display: flex; align-items: center; gap: 6px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: var(--text); }
 .toolbar > strong { font-weight: 700; letter-spacing: .01em; margin-right: 2px; }
 .toolbar .sp { flex: 1; }
@@ -1397,7 +1494,7 @@ onUnmounted(() => {
 .toolbar .loadsel { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .builder.dark .toolbar { color: var(--text); }
 .builder.dark .toolbar button.on { background: #2563eb; color: #fff; }
-.cols { display: flex; gap: 8px; flex: 1; min-height: 0; }
+.cols { display: flex; gap: 8px; flex: 1; min-height: 0; padding: 0 16px 16px; }
 .palette, .inspector { width: 184px; flex: none; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px; overflow: auto; }
 .inspector { width: 228px; }
 .palette button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 4px; text-align: left; padding: 8px 10px; }
@@ -1475,6 +1572,9 @@ onUnmounted(() => {
 .ctrlbtns .close { background: var(--surface-2); color: var(--muted); }
 .targets { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .tlabel { font-size: 11px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: .03em; }
+.pipe-swatches { display: flex; gap: 6px; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.swatch.on { border-color: var(--text); }
 .targets label.chk { font-weight: 500; }
 .info { display: flex; flex-direction: column; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; }
 .irow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); }

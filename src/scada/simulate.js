@@ -42,8 +42,13 @@ function tank(elm, isHopper, inflow, outflow) {
   }
   elm.set('level', lvl, { silent: true })
   // art lives in base-size coords inside the 'sc' scale group — never use elm.size() here
-  if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
-  else elm.attr('fill', { y: 36 + 178 * (1 - lvl / 100), height: 178 * lvl / 100 })
+  if (isHopper) {
+    elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
+  } else {
+    const y = 36 + 178 * (1 - lvl / 100), h = 178 * lvl / 100
+    elm.attr('fill', { y, height: h })
+    elm.attr('valText', { y: y + h / 2 + 6, text: Math.round(lvl) + '%' }) // centered readout in the fill
+  }
 }
 
 // Visual-only helpers (no value drift) — shared so the builder's edit-mode

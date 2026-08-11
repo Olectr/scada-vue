@@ -9,16 +9,19 @@ const { state } = usePlantData()
 const { user, logout } = useAuth()
 
 const active = 'builder'
-const year = new Date().getFullYear()
+const now = new Date()
+const year = now.getFullYear()
+const pad2 = (n) => String(n).padStart(2, '0')
+const today = `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`
 const version = 'v1.0.0'
 </script>
 
 <template>
   <div class="app">
     <header class="topbar">
-      <img class="topbar-logo" src="/olectr-logo.png" alt="Olectr" />
+      <img class="topbar-logo" src="https://metrion.blr1.cdn.digitaloceanspaces.com/metrion-logo.svg" alt="Metrion" />
       <div class="right">
-        <div class="conn">Date <b style="color:var(--txt)">23/06/2026</b></div>
+        <div class="conn">Date <b style="color:var(--txt)">{{ today }}</b></div>
         <div class="clock">{{ state.clock }}</div>
         <div class="user-box" v-if="user">
           <span class="user-email">{{ user.profile.email }}</span>
@@ -33,7 +36,7 @@ const version = 'v1.0.0'
       </Transition>
     </main>
 
-    <footer class="footer">© {{ year }} Olectr · {{ version }}</footer>
+    <footer class="footer">© {{ year }} Metrion · {{ version }}</footer>
   </div>
 </template>
 
