@@ -5,15 +5,16 @@ import { clamp, drift, rnd, state } from '../composables/usePlantData'
 import { arcSeg, needlePoint, tickPoint } from './shapes'
 
 // curated live tags from the plant data singleton — bindable to tanks (%) and gauges (value)
+// labelKey resolves via vue-i18n in the builder's inspector; path is the state lookup key — do not rename
 export const TAGS = [
-  { label: 'Water · Tank 1 level %', path: 'water.lvl1' },
-  { label: 'Water · Tank 2 level %', path: 'water.lvl2' },
-  { label: 'Water · Pump 1 pressure', path: 'water.p1' },
-  { label: 'Water · Header pressure', path: 'water.prs' },
-  { label: 'Boiler · Drum level %', path: 'boiler.bDrum' },
-  { label: 'Boiler · Steam pressure', path: 'boiler.bPrs' },
-  { label: 'Air · System pressure', path: 'air.prs' },
-  { label: 'Solar · Irradiance', path: 'solar.irr' },
+  { labelKey: 'tags.waterLvl1', path: 'water.lvl1' },
+  { labelKey: 'tags.waterLvl2', path: 'water.lvl2' },
+  { labelKey: 'tags.waterP1', path: 'water.p1' },
+  { labelKey: 'tags.waterPrs', path: 'water.prs' },
+  { labelKey: 'tags.boilerDrum', path: 'boiler.bDrum' },
+  { labelKey: 'tags.boilerPrs', path: 'boiler.bPrs' },
+  { labelKey: 'tags.airPrs', path: 'air.prs' },
+  { labelKey: 'tags.solarIrr', path: 'solar.irr' },
 ]
 function readTag(path) { return path.split('.').reduce((o, k) => (o == null ? o : o[k]), state) }
 
