@@ -69,6 +69,13 @@ export const PID_DEFS = [
     }),
   },
   {
+    key: 'pidHxInline',
+    ...def('Inline Exchanger', {
+      w: 44, h: 44,
+      svg: `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><circle cx="22" cy="22" r="19" fill="${LGREY}" stroke="${S}" stroke-width="1.5"/><path d="M7 7 L37 37 M37 7 L7 37" stroke="${S}" stroke-width="1.5"/></svg>`,
+    }),
+  },
+  {
     key: 'pidPump',
     ...def('Pump (P&ID)', {
       w: 72, h: 72, behavior: 'onoff',

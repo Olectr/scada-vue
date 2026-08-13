@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, SCALE_BASE, applyScale } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, layoutGaugeBands, TAGS } from '../scada/simulate'
 import { PID_DEFS } from '../scada/pidSymbols'
 import TrendChart from '../components/TrendChart.vue'
 import { useAuth } from '../composables/useAuth'
@@ -11,7 +11,7 @@ const { user, logout } = useAuth()
 const props = defineProps({ clock: { type: String, default: '' }, today: { type: String, default: '' }, version: { type: String, default: '' } })
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
-const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
+const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidHxInline: Merge, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
 // metric key(s) each instrument preset exposes for external panel/DER/param linkage (see defaultMetrics)
 const INSTRUMENT_METRIC_KEYS = { manualValve: ['open'], nrv: ['open'], pressureTransmitter: ['pressure'], instValve: ['open'], turbidity: ['turbidity'], flowTransmitter: ['flow', 'total'], radarLevel: ['level'], chlorineAnalyzer: ['chlorine'], hydrostaticLevel: ['level'] }
 
@@ -180,6 +180,78 @@ async function loadTemplate(kind) {
     lbl('Crude ◀', 15, 590, GREY); const pumpOut = mk('pump'); pumpOut.position(140, 580)
     pipe(pumpReb, 'l', vRes, 'right', GREY); pipe(pumpReb, 'l', vRec, 'right', GREY); pipe(pumpReb, 'l', vSto, 'right', NITRO)
     pipe(pumpOut, 'r', v50, 'right', GREY)
+  } else if (kind === 'gas') {
+    // eigen-style Gas Treatment train — 4-vessel separator cascade (T-001..T-004), each stage
+    // cooled by an inline exchanger, with a live pressure gauge + temp readout per stage, an
+    // ejector skid off T-003, and a metering/export header after T-004.
+    const GREY = '#c5cdd6', GAS = '#f59e0b'
+    const pidDef = key => PID_DEFS.find(d => d.key === key)
+    const mkP = (key, x, y, over) => { const e = makeCustom({ ...pidDef(key), ...(over || {}) }, x, y); graph.addCell(e); return e }
+    const skid = (label, x, y, w, h) => {
+      const e = makeCustom({ label, shape: 'box', w, h, color: '#eef2f6', border: '#4b5866' }, x, y)
+      e.attr('name/text', label); graph.addCell(e); return e
+    }
+    const lbl = (text, x, y, color, w) => {
+      const n = new Note({ position: { x, y }, size: { width: w || 230, height: 18 },
+        attrs: { box: { fill: 'transparent', stroke: 'none' }, name: { text, fill: color || '#94a3b8', fontSize: 12, fontWeight: 700 } } })
+      graph.addCell(n); return n
+    }
+    const pipe = (s, sp, t, tp, color, width) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } })
+      l.attr('line/stroke', color || GREY); l.attr('line/strokeWidth', width || 5); l.attr('wrap/strokeWidth', (width || 5) + 5)
+      graph.addCell(l); return l
+    }
+    const route = (s, sp, x, y, text, color) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { x, y } })
+      l.attr('wrap/stroke', color || GREY); l.attr('wrap/strokeWidth', 4)
+      l.attr('wrap/targetMarker', { type: 'path', d: 'M 10 -6 0 0 10 6 Z', fill: color || GREY })
+      l.attr('line/opacity', 0)
+      graph.addCell(l); lbl(text, x + 14, y - 9, color || GREY)
+    }
+    const tank4 = (name, x, lvl) => {
+      const tk = new CylTank({ position: { x, y: 260 }, attrs: { name: { text: name } },
+        ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true),
+        level: lvl, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) })
+      setTankMarks(tk); graph.addCell(tk); return tk
+    }
+    const mkGauge = (x, tag, lo, hi, warn, danger) => {
+      const g = new PGauge({ position: { x, y: 20 }, attrs: { name: { text: nextName('Gauge') } },
+        value: (lo + hi) / 2, simMin: lo, simMax: hi, bandYellow: warn, bandRed: danger, tag,
+        ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) })
+      layoutGaugeBands(g); graph.addCell(g); return g
+    }
+    const temp = (x, y, val) => { const t = mkP('pidTempBox', x, y); t.set('value', val); return t }
+
+    const t1 = tank4('T-001', 40, 39)
+    const t2 = tank4('T-002', 300, 54)
+    const t3 = tank4('T-003', 560, 65)
+    const t4 = tank4('T-004', 820, 43)
+
+    mkGauge(67, 'water.prs', 0, 8, 55, 80); temp(73, 128, 25)
+    mkGauge(327, 'air.prs', 0, 10, 55, 78); temp(333, 128, 27)
+    mkGauge(587, 'boiler.bPrs', 100, 160, 60, 80); temp(593, 128, 29)
+    mkGauge(847, 'solar.irr', 500, 1000, 60, 85); temp(853, 128, 45)
+
+    const hx1 = mkP('pidHxInline', 223, 380)
+    const hx2 = mkP('pidHxInline', 483, 380)
+    const hx3 = mkP('pidHxInline', 743, 380)
+    pipe(t1, 'bot', hx1, 'left', GAS); pipe(hx1, 'right', t2, 'top', GAS)
+    pipe(t2, 'bot', hx2, 'left', GAS); pipe(hx2, 'right', t3, 'top', GAS)
+    pipe(t3, 'bot', hx3, 'left', GAS); pipe(hx3, 'right', t4, 'top', GAS)
+
+    const ejector = skid('Ejector skid', 560, 570, 150, 60)
+    pipe(t3, 'bot', ejector, 'left', GREY); pipe(ejector, 'right', t3, 'top', GREY)
+
+    const metering = skid('Metering skid', 1020, 20, 140, 56)
+    const launcher = skid('Gas export launcher', 1020, 160, 170, 56)
+    pipe(t4, 'top', metering, 'left', GAS)
+    pipe(t4, 'top', launcher, 'left', GAS)
+
+    route(t4, 'top', 1260, 40, 'To gas lift manifold', GAS)
+    route(metering, 'right', 1260, 140, 'To gas rejection system', GAS)
+    route(launcher, 'right', 1260, 240, 'To gas export pipeline', GAS)
+    route(t1, 'bot', 1260, 460, 'To 2nd stage separator heater', GREY)
+    route(t2, 'bot', 1260, 540, 'To inlet separator', GREY)
   }
   currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
 }
@@ -206,6 +278,12 @@ function migrateCells() {
       }
       if (e.get('svgBody') && !e.get('svgVB')) e.set('svgVB', parseSvgVB(e.get('svgBody'))) // backfill for pre-svgVB saves
       renderCustom(e) // re-apply shape/icon/colors after load
+    }
+    if (e.get('type') === 's.PG') {
+      // backfill band thresholds on gauges saved before banded dials existed, then redraw
+      if (e.get('bandYellow') == null) e.set('bandYellow', 60)
+      if (e.get('bandRed') == null) e.set('bandRed', 85)
+      layoutGaugeBands(e)
     }
     applyScale(e) // re-apply per-element scale on fixed-art shapes (no-op at scale 1 / other types)
     // backfill metrics: add the panel/DER/param/value linkage for any expected key missing
@@ -336,7 +414,7 @@ function makeEl(type, key) {
     case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95, metrics: defaultMetrics(['level']) })
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2, metrics: defaultMetrics(['on', 'pressure', 'runtime']) })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true, metrics: defaultMetrics(['open']) })
-    case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) })
+    case 'gauge': { const g = new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) }); layoutGaugeBands(g); return g }
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true, metrics: defaultMetrics(['pct']) })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
     case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true), metrics: defaultMetrics(['pressure']) })
@@ -627,7 +705,7 @@ function aiGlyphTransform(def) { return glyphTransform(def.w, def.h) }
 const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
   isPump: false, isValve: false, isControl: false,
-  simMin: 0, simMax: 8, on: false, open: false, pct: 100,
+  simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, on: false, open: false, pct: 100,
   targets: [], targetOptions: [],
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [], angle: 0, tag: '',
@@ -799,6 +877,8 @@ function selectEl(model) {
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
+  sel.bandYellow = model.get('bandYellow') ?? 60
+  sel.bandRed = model.get('bandRed') ?? 85
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
   sel.angle = typeof model.angle === 'function' ? Math.round(model.angle()) : 0
   sel.tag = model.get('tag') || ''
@@ -835,6 +915,14 @@ function applyRange() {
   if (!Number.isNaN(lo)) m.set('simMin', lo)
   if (!Number.isNaN(hi)) m.set('simMax', hi)
   if (m.get('type') === 's.Cyl') setTankMarks(m) // move the range marker lines live
+  else if (m.get('type') === 's.PG') layoutGaugeBands(m) // range change also redraws tick labels
+}
+function applyBands() {
+  const m = selModel(); if (!m || m.get('type') !== 's.PG') return
+  const y = Number(sel.bandYellow), r = Number(sel.bandRed)
+  if (!Number.isNaN(y)) m.set('bandYellow', y)
+  if (!Number.isNaN(r)) m.set('bandRed', r)
+  layoutGaugeBands(m)
 }
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
@@ -1016,8 +1104,9 @@ function computeAlarms() {
       const lvl = Math.round(e.get('level') ?? 0), lo = e.get('simMin') ?? 20
       if (lvl < lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
     } else if (t === 's.PG') {
-      const v = e.get('value') ?? 0, hi = e.get('simMax') ?? 8
-      if (v >= hi * 0.95) msg = `HIGH PRESSURE ${v.toFixed(1)}`
+      const v = e.get('value') ?? 0, lo = e.get('simMin') ?? 0, hi = e.get('simMax') ?? 8
+      const redAt = lo + (hi - lo) * ((e.get('bandRed') ?? 85) / 100)
+      if (v >= redAt) msg = `HIGH PRESSURE ${v.toFixed(1)}`
     }
     if (msg) { const p = e.position(); list.push({ id: e.id, name: nameOf(e), msg }); ui.push({ id: e.id, x: p.x, y: p.y }) }
   })
@@ -1273,6 +1362,7 @@ onUnmounted(() => {
                 <option value="water">Water Treatment</option>
                 <option value="dual">Dual Pump</option>
                 <option value="chemical">Chemical Distillation</option>
+                <option value="gas">Gas Treatment</option>
               </select>
             </div>
           </div>
@@ -1371,6 +1461,14 @@ onUnmounted(() => {
             <label>{{ sel.type === 's.PG' ? 'Max' : 'High mark %' }}
               <input type="number" v-model="sel.simMax" @input="applyRange">
             </label>
+            <template v-if="sel.type === 's.PG'">
+              <label>Yellow at %
+                <input type="number" v-model="sel.bandYellow" @input="applyBands">
+              </label>
+              <label>Red at %
+                <input type="number" v-model="sel.bandRed" @input="applyBands">
+              </label>
+            </template>
             <label>Bind live tag
               <select v-model="sel.tag" @change="applyTag">
                 <option value="">— simulated —</option>
