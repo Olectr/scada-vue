@@ -215,6 +215,37 @@ export const Chart = joint.dia.Element.define('s.Chart', { size: { width: 320, h
   name: { x: 'calc(w/2)', y: 'calc(h+16)', textAnchor: 'middle', fill: '#1f2d3d', fontSize: 13, fontWeight: 'bold' },
 } }, { markup: svg`<rect @selector="box"/><text @selector="name"/>` })
 
+// New: injection well card — dark tile with the well tag + its live injection rate.
+// 'rate' text is driven by wellCard() in simulate.js (rate is 0 unless injection water
+// actually reaches the card); `produced` marks a well as taking produced water so the
+// summary panel can split total injection from produced-water injection.
+export const WellCard = joint.dia.Element.define('s.Well', { size: { width: 78, height: 76 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h-24)', rx: 6, fill: '#101d2c', stroke: '#e6edf3', strokeWidth: 1.5 },
+  pre: { x: 'calc(w/2)', y: 21, textAnchor: 'middle', fill: '#e6edf3', fontSize: 12, text: 'Brønn' },
+  name: { x: 'calc(w/2)', y: 41, textAnchor: 'middle', fill: '#e6edf3', fontSize: 13, fontWeight: 'bold', text: 'A-00' },
+  rate: { x: 'calc(w/2)', y: 'calc(h-4)', textAnchor: 'middle', fill: '#94a3b8', fontSize: 12, fontWeight: 'bold', text: '0 m³/h' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="pre"/><text @selector="name"/><text @selector="rate"/>` })
+
+// New: injection summary panel — total vs produced-water injection. Both values are
+// DERIVED (summed from every s.Well on the screen by sumPanel() in simulate.js); only
+// the two row labels are editable, so the numbers can never drift from the well cards.
+export const SumPanel = joint.dia.Element.define('s.Sum', { size: { width: 300, height: 92 }, attrs: {
+  box: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 8, fill: '#101d2c', stroke: '#e6edf3', strokeWidth: 1.5 },
+  l1: { x: 18, y: 37, fill: '#e6edf3', fontSize: 14, text: 'Total vanninjeksjon:' },
+  v1: { x: 'calc(w-18)', y: 37, textAnchor: 'end', fill: '#e6edf3', fontSize: 14, fontWeight: 'bold', text: '0' },
+  l2: { x: 18, y: 69, fill: '#e6edf3', fontSize: 14, text: 'Prod. vanninjeksjon:' },
+  v2: { x: 'calc(w-18)', y: 69, textAnchor: 'end', fill: '#e6edf3', fontSize: 14, fontWeight: 'bold', text: '0' },
+} }, { markup: svg`<rect @selector="box"/><text @selector="l1"/><text @selector="v1"/><text @selector="l2"/><text @selector="v2"/>` })
+
+// New: status dot — a line/equipment state indicator bound to one pump or valve via
+// `watch` (NOT `target` — the graph reserves source/target for link endpoints and would
+// try to re-index this element as a link). Fill is driven by setDotVisual() in simulate.js
+// (green = running/open, red = stopped/closed, amber = unbound); `round` swaps the square
+// chip for a circle.
+export const StatusDot = joint.dia.Element.define('s.Dot', { size: { width: 18, height: 18 }, attrs: {
+  dot: { x: 0, y: 0, width: 'calc(w)', height: 'calc(h)', rx: 3, fill: '#f59e0b', stroke: '#0a1420', strokeWidth: 1 },
+} }, { markup: svg`<rect @selector="dot"/>` })
+
 // ---- resizable fixed-art shapes: uniform scaling via an 'sc' wrapper group ----
 // Art stays in base-size coordinates; el.attr('sc/transform', 'scale(s)') zooms it while the
 // model size tracks base*s so ports, links, and selection bboxes stay aligned.
@@ -277,6 +308,9 @@ Object.assign(joint.shapes.s, {
   Note,
   Instrument,
   Custom,
+  Well: WellCard,
+  Sum: SumPanel,
+  Dot: StatusDot,
   FlowPipe,
   Leader,
 })

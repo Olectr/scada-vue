@@ -1,15 +1,15 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, SCALE_BASE, applyScale } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, layoutGaugeBands, TAGS } from '../scada/simulate'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, WellCard, SumPanel, StatusDot, SCALE_BASE, applyScale } from '../scada/shapes'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, layoutGaugeBands, setDotVisual, sumPanel, TAGS } from '../scada/simulate'
 import { PID_DEFS } from '../scada/pidSymbols'
 import TrendChart from '../components/TrendChart.vue'
 import { useAuth } from '../composables/useAuth'
-import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Unlock, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints, Menu, Search, ChevronLeft, ChevronRight, ChevronDown, ShoppingBasket, MoreHorizontal, LogOut } from 'lucide-vue-next'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Unlock, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints, Menu, Search, ChevronLeft, ChevronRight, ChevronDown, ShoppingBasket, MoreHorizontal, LogOut, Sigma, Circle } from 'lucide-vue-next'
 const { user, logout } = useAuth()
 const props = defineProps({ clock: { type: String, default: '' }, today: { type: String, default: '' }, version: { type: String, default: '' } })
-const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
+const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag, well: Droplets, sum: Sigma, dot: Circle }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
 const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidHxInline: Merge, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
 // metric key(s) each instrument preset exposes for external panel/DER/param linkage (see defaultMetrics)
@@ -252,6 +252,107 @@ async function loadTemplate(kind) {
     route(launcher, 'right', 1260, 240, 'To gas export pipeline', GAS)
     route(t1, 'bot', 1260, 460, 'To 2nd stage separator heater', GREY)
     route(t2, 'bot', 1260, 540, 'To inlet separator', GREY)
+  } else if (kind === 'reservoir') {
+    // eigen-style Reservoir Dashboard — two water-injection trains (PA-51-0010B → Reservoir B,
+    // PA-51-0010A → Reservoir C) fed from the U-29 header, produced water joining through
+    // VD-44-004 / HV-51-0274, sea discharge (SJØ) off each train, and the injection wells with
+    // a summary panel that auto-sums their rates. Status dots watch the pumps and valves.
+    const WATER = '#22d3ee', SEA = '#38bdf8'
+    const pidDef = key => PID_DEFS.find(d => d.key === key)
+    const mkP = (key, x, y, over) => { const e = makeCustom({ ...pidDef(key), ...(over || {}) }, x, y); graph.addCell(e); return e }
+    const lbl = (text, x, y, color, size, w) => {
+      const n = new Note({ position: { x, y }, size: { width: w || 160, height: (size || 12) + 6 },
+        attrs: { box: { fill: 'transparent', stroke: 'none' }, name: { text, fill: color || '#94a3b8', fontSize: size || 12, fontWeight: 700 } } })
+      graph.addCell(n); return n
+    }
+    const pipe = (s, sp, t, tp, color, width) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } })
+      l.attr('line/stroke', color || WATER); l.attr('line/strokeWidth', width || 5); l.attr('wrap/strokeWidth', (width || 5) + 5)
+      graph.addCell(l); return l
+    }
+    // pressure transmitter point — a live pressure tap with a "PT" caption, as on the reference screen
+    const pt = (x, y) => {
+      const t = new Tap({ position: { x, y }, pressure: 0,
+        ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true),
+        metrics: defaultMetrics(['pressure']) })
+      graph.addCell(t); lbl('PT', x + 30, y - 17, '#94a3b8', 11, 30); return t
+    }
+    const zoneAt = (name, x, y, px) => {
+      const z = new Zone({ position: { x, y }, attrs: { name: { text: name } }, ports: portsCfg([{ id: 'p', x: px, y: 20 }], true) })
+      graph.addCell(z); return z
+    }
+    const wellAt = (tag, x, y, lo, hi, produced) => {
+      const w = new WellCard({ position: { x, y }, attrs: { name: { text: tag } },
+        rate: (lo + hi) / 2, simMin: lo, simMax: hi, produced: !!produced,
+        ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
+      w.attr('rate/text', Math.round((lo + hi) / 2) + ' m³/h') // readable before the sim starts
+      graph.addCell(w); return w
+    }
+    const dotAt = (x, y, watched, round) => {
+      const d = new StatusDot({ position: { x, y }, watch: watched ? watched.id : null, round: !!round, metrics: defaultMetrics(['state']) })
+      graph.addCell(d); setDotVisual(d, graph); return d
+    }
+
+    lbl('Reservoir F vann', 300, 4, '#e6edf3', 18, 300)
+
+    // injection header
+    lbl('U-24', 16, 116, '#94a3b8', 12, 60)
+    const zU29 = zoneAt('U-29', 16, 140, 110)
+    const feMain = mk('flow'); feMain.position(160, 132)
+    pipe(zU29, 'p', feMain, 'l')
+
+    // train B — Reservoir B
+    const ptB1 = pt(280, 86)
+    const pumpB = mk('pump'); pumpB.position(400, 64); pumpB.attr('name/text', 'PA-51-0010B')
+    const ptB2 = pt(520, 86), ptB3 = pt(620, 86)
+    const drumB = mkP('pidDrum', 720, 35); drumB.attr('name/text', 'Reservoir B'); drumB.set('level', 64)
+    const ptB4 = pt(880, 86)
+    pipe(feMain, 'r', ptB1, 'l'); pipe(ptB1, 'r', pumpB, 'l'); pipe(pumpB, 'r', ptB2, 'l')
+    pipe(ptB2, 'r', ptB3, 'l'); pipe(ptB3, 'r', drumB, 'left'); pipe(drumB, 'right', ptB4, 'l')
+
+    // train C — Reservoir C
+    const ptC1 = pt(280, 261)
+    const pumpC = mk('pump'); pumpC.position(400, 239); pumpC.attr('name/text', 'PA-51-0010A')
+    const ptC2 = pt(520, 261), ptC3 = pt(620, 261)
+    const drumC = mkP('pidDrum', 720, 210); drumC.attr('name/text', 'Reservoir C'); drumC.set('level', 58)
+    const ptC4 = pt(880, 261)
+    pipe(feMain, 'r', ptC1, 'l'); pipe(ptC1, 'r', pumpC, 'l'); pipe(pumpC, 'r', ptC2, 'l')
+    pipe(ptC2, 'r', ptC3, 'l'); pipe(ptC3, 'r', drumC, 'left'); pipe(drumC, 'right', ptC4, 'l')
+
+    // sea discharge per train
+    const vSeaB = mk('valve'); vSeaB.position(1000, 60); vSeaB.attr('name/text', 'HV-51-0301')
+    const vSeaC = mk('valve'); vSeaC.position(1000, 380); vSeaC.attr('name/text', 'HV-51-0302')
+    const sjoB = zoneAt('SJØ', 990, 190, 0), sjoC = zoneAt('SJØ', 990, 500, 0)
+    pipe(ptB4, 'r', vSeaB, 'l', SEA); pipe(vSeaB, 'r', sjoB, 'p', SEA)
+    pipe(ptC4, 'r', vSeaC, 'l', SEA); pipe(vSeaC, 'r', sjoC, 'p', SEA)
+
+    // produced water — VD-44-004 through HV-51-0274 back into the injection header
+    const zProd = zoneAt('Produsert vann', 16, 250, 110)
+    const vdTank = mk('tank'); vdTank.position(60, 370); vdTank.attr('name/text', 'VD-44-004')
+    vdTank.set('level', 82); vdTank.set('simMin', 10); vdTank.set('simMax', 70); setTankMarks(vdTank)
+    const hv = mk('valve'); hv.position(250, 470); hv.attr('name/text', 'HV-51-0274')
+    const feProd = mk('flow'); feProd.position(370, 490)
+    pipe(zProd, 'p', vdTank, 'top'); pipe(vdTank, 'bot', hv, 'l')
+    pipe(hv, 'r', feProd, 'l'); pipe(feProd, 'r', ptC1, 'l')
+    lbl('Produsert vann', 250, 600, '#e6edf3', 14, 200)
+
+    // injection wells — A-03/A-06 take the produced-water stream, so the summary's two rows differ
+    lbl('Vanninjeksjon brønner', 1120, 436, '#94a3b8', 12, 220)
+    const wA22 = wellAt('A-22', 1330, 40, 60, 95)
+    const wA40 = wellAt('A-40', 1120, 470, 25, 40)
+    const wA02 = wellAt('A-02', 1220, 470, 70, 90)
+    const wA03 = wellAt('A-03', 1320, 470, 22, 35, true)
+    const wA06 = wellAt('A-06', 1420, 470, 75, 95, true)
+    pipe(ptB4, 'r', wA22, 'in')
+    for (const w of [wA40, wA02, wA03, wA06]) pipe(ptC4, 'r', w, 'in')
+
+    // totals auto-sum from the well cards above
+    const summary = new SumPanel({ position: { x: 560, y: 420 }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
+    graph.addCell(summary); sumPanel(summary, graph)
+
+    // status dots — live pump/valve state
+    dotAt(496, 66, pumpB, true); dotAt(496, 241, pumpC, true)
+    dotAt(1082, 96, vSeaB); dotAt(1082, 416, vSeaC); dotAt(332, 506, hv)
   }
   currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
 }
@@ -261,6 +362,7 @@ const METRIC_KEYS_BY_TYPE = {
   's.Cyl': ['level'], 's.Hopper': ['level'], 's.Pump': ['on', 'pressure', 'runtime'],
   's.Valve': ['open'], 's.PG': ['value'], 's.Control': ['pct'], 's.Tap': ['pressure'],
   's.Flow': ['flow', 'total'], 's.Quality': ['ph', 'turbidity', 'chlorine', 'dissolvedOxygen'],
+  's.Well': ['rate'], 's.Sum': ['total', 'prod'], 's.Dot': ['state'],
 }
 // upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
 function migrateCells() {
@@ -285,6 +387,7 @@ function migrateCells() {
       if (e.get('bandRed') == null) e.set('bandRed', 85)
       layoutGaugeBands(e)
     }
+    if (e.get('type') === 's.Dot') setDotVisual(e, graph) // repaint from the bound pump/valve on load
     applyScale(e) // re-apply per-element scale on fixed-art shapes (no-op at scale 1 / other types)
     // backfill metrics: add the panel/DER/param/value linkage for any expected key missing
     // it entirely (older exports had no metrics object at all), and add a null value
@@ -361,6 +464,9 @@ const palette = [
   { type: 'quality', label: 'Water Quality', ico: '🧪' },
   { type: 'chart', label: 'Chart', ico: '📈' },
   { type: 'note', label: 'Label', ico: '📝' },
+  { type: 'well', label: 'Injection Well', ico: '⛲' },
+  { type: 'sum', label: 'Injection Summary', ico: '∑' },
+  { type: 'dot', label: 'Status Dot', ico: '⬤' },
   ...INSTRUMENT_DEFS.map(def => ({ type: 'instrument', key: def.key, label: def.label, icon: INSTRUMENT_PALETTE_ICON[def.key] })),
 ]
 
@@ -422,6 +528,9 @@ function makeEl(type, key) {
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
     case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } }, metrics: defaultMetrics(['label']) })
+    case 'well': return new WellCard({ position: { x, y }, attrs: { name: { text: nextName('Well') } }, rate: 40, simMin: 20, simMax: 90, produced: false, ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
+    case 'sum': return new SumPanel({ position: { x, y }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
+    case 'dot': return new StatusDot({ position: { x, y }, watch: null, round: false, metrics: defaultMetrics(['state']) })
     case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true), metrics: defaultMetrics(INSTRUMENT_METRIC_KEYS[key] || []) }) }
   }
 }
@@ -711,6 +820,7 @@ const sel = reactive({
   info: null, connections: [], angle: 0, tag: '',
   x: 0, y: 0, w: 0, h: 0, isCustom: false, locked: false,
   hasStyle: false, fillC: '#ffffff', borderC: '#000000', note: '', devtag: '',
+  isWell: false, produced: false, isDot: false, dotTarget: '', roundDot: false, dotOptions: [],
 })
 const tagList = TAGS
 function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
@@ -806,6 +916,9 @@ function liveFields(m) {
   else if (t === 's.Flow') { add('Flow', (m.get('flow') ?? 0) + ' m³/h'); add('Total', Math.round(m.get('total') || 0) + ' m³') }
   else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).filter(id => graph.getCell(id)).length) }
   else if (t === 's.Quality') { add('pH', Number(m.get('ph') ?? 0).toFixed(2)); add('Turb', Number(m.get('turb') ?? 0).toFixed(2) + ' NTU'); add('Cl', Number(m.get('cl') ?? 0).toFixed(2)); add('DO', Number(m.get('do') ?? 0).toFixed(1)) }
+  else if (t === 's.Well') { add('Rate', Math.round(m.get('rate') ?? 0) + ' m³/h'); add('Water', m.get('produced') ? 'produced' : 'injection') }
+  else if (t === 's.Sum') { add('Total', Math.round(m.get('total') ?? 0) + ' m³/h'); add('Produced', Math.round(m.get('prod') ?? 0) + ' m³/h') }
+  else if (t === 's.Dot') { const tgt = m.get('watch') && graph.getCell(m.get('watch')); add('Watching', tgt ? nameOf(tgt) : '—'); add('State', tgt ? elemValue(tgt) : 'unbound') }
   else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.max(0, Math.min(100, Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100))) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
   return F
 }
@@ -831,7 +944,7 @@ function applyPipe() {
   m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
 }
 function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument', 's.Well': 'Injection Well', 's.Sum': 'Injection Summary', 's.Dot': 'Status Dot' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -842,6 +955,8 @@ function elemValue(e) {
     case 's.Quality': return 'pH ' + Number(e.get('ph') ?? 7.2).toFixed(2)
     case 's.Flow': return (e.get('flow') ?? 0) + ' m³/h'
     case 's.Tap': return Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
+    case 's.Well': return Math.round(e.get('rate') ?? 0) + ' m³/h'
+    case 's.Sum': return Math.round(e.get('total') ?? 0) + ' m³/h total'
     default: return '—'
   }
 }
@@ -871,9 +986,9 @@ function selectEl(model) {
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
-  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap' && t !== 's.Flow'
+  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap' && t !== 's.Flow' && t !== 's.Sum' && t !== 's.Dot'
   sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
-  sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
+  sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG' || t === 's.Well')
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
@@ -884,6 +999,16 @@ function selectEl(model) {
   sel.tag = model.get('tag') || ''
   const p = model.position(), sz = model.size()
   sel.x = Math.round(p.x); sel.y = Math.round(p.y); sel.w = sz.width; sel.h = sz.height
+  sel.isWell = t === 's.Well'; sel.produced = !!model.get('produced')
+  sel.isDot = t === 's.Dot'; sel.roundDot = !!model.get('round')
+  sel.dotTarget = model.get('watch') ? String(model.get('watch')) : ''
+  // a dot can only watch something with an open/closed (or on/off) state
+  sel.dotOptions = sel.isDot
+    ? graph.getElements()
+      .filter(e => e.get('type') === 's.Pump' || e.get('type') === 's.Valve' ||
+        (e.get('type') === 's.Custom' && (e.get('behavior') === 'onoff' || e.get('behavior') === 'openclose')))
+      .map(e => ({ id: String(e.id), name: e.attr('name/text') || TYPE_LABEL[e.get('type')] || e.get('type') }))
+    : []
   sel.isCustom = t === 's.Custom'; sel.locked = !!model.get('locked')
   sel.hasStyle = t === 's.Custom' || !!STYLE_SEL[t]
   if (t === 's.Custom') { sel.fillC = model.get('fillColor') || '#e0e7ff'; sel.borderC = model.get('borderColor') || '#6366f1' }
@@ -923,6 +1048,23 @@ function applyBands() {
   if (!Number.isNaN(y)) m.set('bandYellow', y)
   if (!Number.isNaN(r)) m.set('bandRed', r)
   layoutGaugeBands(m)
+}
+// injection well: which stream it takes — flips the summary row this well counts toward
+function applyProduced() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Well') return
+  m.set('produced', !!sel.produced)
+}
+// status dot: which pump/valve it watches, and square vs round chip
+function applyDotTarget() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Dot') return
+  m.set('watch', sel.dotTarget || null)
+  setDotVisual(m, graph)
+  updateSelInfo()
+}
+function applyDotRound() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Dot') return
+  m.set('round', !!sel.roundDot)
+  setDotVisual(m, graph)
 }
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
@@ -1246,6 +1388,8 @@ function stopSim() {
     const t = e.get('type')
     if (t === 's.Flow') { e.set('flow', 0); e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') }
     else if (t === 's.Tap') { e.set('pressure', 0); e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
+    else if (t === 's.Well') { e.set('rate', 0); e.attr('rate/text', '0 m³/h') }
+    else if (t === 's.Sum') { e.set('total', 0); e.set('prod', 0); e.attr('v1/text', '0'); e.attr('v2/text', '0') }
   })
 }
 watch(mode, m => { linkSel.id = null; syncResizeTool(m === 'edit' ? selModel() : null); if (m === 'run') startSim(); else stopSim() })
@@ -1363,6 +1507,7 @@ onUnmounted(() => {
                 <option value="dual">Dual Pump</option>
                 <option value="chemical">Chemical Distillation</option>
                 <option value="gas">Gas Treatment</option>
+                <option value="reservoir">Reservoir Dashboard</option>
               </select>
             </div>
           </div>
@@ -1455,10 +1600,10 @@ onUnmounted(() => {
             </div>
           </template>
           <template v-if="sel.hasRange">
-            <label>{{ sel.type === 's.PG' ? 'Min' : 'Low mark %' }}
+            <label>{{ sel.type === 's.PG' ? 'Min' : sel.type === 's.Well' ? 'Min m³/h' : 'Low mark %' }}
               <input type="number" v-model="sel.simMin" @input="applyRange">
             </label>
-            <label>{{ sel.type === 's.PG' ? 'Max' : 'High mark %' }}
+            <label>{{ sel.type === 's.PG' ? 'Max' : sel.type === 's.Well' ? 'Max m³/h' : 'High mark %' }}
               <input type="number" v-model="sel.simMax" @input="applyRange">
             </label>
             <template v-if="sel.type === 's.PG'">
@@ -1469,7 +1614,7 @@ onUnmounted(() => {
                 <input type="number" v-model="sel.bandRed" @input="applyBands">
               </label>
             </template>
-            <label>Bind live tag
+            <label v-if="sel.type !== 's.Well'">Bind live tag
               <select v-model="sel.tag" @change="applyTag">
                 <option value="">— simulated —</option>
                 <option v-for="t in tagList" :key="t.path" :value="t.path">{{ t.label }}</option>
@@ -1482,6 +1627,20 @@ onUnmounted(() => {
           <label v-if="sel.isValve" class="chk">
             <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> Open
           </label>
+          <label v-if="sel.isWell" class="chk">
+            <input type="checkbox" v-model="sel.produced" @change="applyProduced"> Takes produced water
+          </label>
+          <template v-if="sel.isDot">
+            <label>Watches
+              <select v-model="sel.dotTarget" @change="applyDotTarget">
+                <option value="">— unbound —</option>
+                <option v-for="o in sel.dotOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
+              </select>
+            </label>
+            <label class="chk">
+              <input type="checkbox" v-model="sel.roundDot" @change="applyDotRound"> Round dot
+            </label>
+          </template>
           <template v-if="sel.isControl">
             <label>Open %
               <input type="range" min="0" max="100" v-model.number="sel.pct" @input="applyPct">

@@ -206,6 +206,48 @@ function custom(elm) {
   }
 }
 
+// injection well card: a well only injects while injection water actually reaches it
+// (fed comes from the solved pipe network), so stopping a pump or closing a valve
+// upstream drops this card — and therefore the summary totals — to zero.
+function wellCard(elm, fed) {
+  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 90
+  const rate = fed ? drift(elm.get('rate') ?? (lo + hi) / 2, lo, hi, Math.max(0.5, (hi - lo) / 25)) : 0
+  elm.set('rate', rate, { silent: true })
+  elm.attr('rate/text', Math.round(rate) + ' m³/h')
+}
+
+// injection summary: both rows are summed from the well cards on screen — total injection
+// and the produced-water share of it. Call this AFTER every well has ticked.
+export function sumPanel(elm, graph) {
+  let total = 0, prod = 0
+  graph.getElements().forEach(w => {
+    if (w.get('type') !== 's.Well') return
+    const r = Number(w.get('rate')) || 0
+    total += r
+    if (w.get('produced')) prod += r
+  })
+  elm.set('total', total, { silent: true })
+  elm.set('prod', prod, { silent: true })
+  elm.attr('v1/text', String(Math.round(total)))
+  elm.attr('v2/text', String(Math.round(prod)))
+}
+
+// status dot: green/red from the bound pump or valve, amber when unbound (or bound to
+// something with no open/closed state, e.g. a deleted target or a passive component).
+export function setDotVisual(elm, graph) {
+  const t = elm.get('watch') ? graph.getCell(elm.get('watch')) : null
+  const ty = t && t.get('type'), beh = t && t.get('behavior')
+  const on = ty === 's.Pump' ? !!t.get('on')
+    : ty === 's.Valve' ? !!t.get('open')
+    : ty === 's.Custom' && beh === 'onoff' ? !!t.get('on')
+    : ty === 's.Custom' && beh === 'openclose' ? !!t.get('open')
+    : null
+  elm.attr('dot', {
+    fill: on === null ? '#f59e0b' : on ? '#22c55e' : '#ef4444',
+    rx: elm.get('round') ? elm.size().width / 2 : 3,
+  })
+}
+
 function quality(elm) {
   const ph = drift(elm.get('ph') ?? 7.2, 6.6, 7.8, 0.05); elm.set('ph', ph, { silent: true }); elm.attr('phV/text', ph.toFixed(2))
   const tb = drift(elm.get('turb') ?? 0.8, 0.2, 1.6, 0.08); elm.set('turb', tb, { silent: true }); elm.attr('tbV/text', tb.toFixed(2) + ' NTU')
@@ -268,7 +310,7 @@ function propagateFlow(graph, ctrlPct) {
     return true
   }
   // passive instruments draw no volumetric flow → never a hydraulic sink, even at a dead end
-  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1, 's.Note': 1 }
+  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1, 's.Note': 1, 's.Sum': 1, 's.Dot': 1 }
   // SUPPLY forward
   let changed = true, guard = 0
   while (changed && guard < 200) {
@@ -322,6 +364,8 @@ export function refreshLinks(graph) {
   const ctrlPct = controlMap(graph)
   const { linkLive } = propagateFlow(graph, ctrlPct)
   animateLinks(graph, ctrlPct, linkLive)
+  // status dots watch pump/valve state, which is exactly what edit-mode toggles change
+  graph.getElements().forEach(e => { if (e.get('type') === 's.Dot') setDotVisual(e, graph) })
 }
 
 export function simulateTick(graph) {
@@ -346,7 +390,12 @@ export function simulateTick(graph) {
       case 's.Tap': tap(elm, graph, flowing, ctrlPct); break
       case 's.Quality': quality(elm); break
       case 's.Custom': custom(elm); break
+      case 's.Well': wellCard(elm, !!flowing[elm.id]); break
+      case 's.Dot': setDotVisual(elm, graph); break
     }
   })
+  // summary panels run in a second pass — element order isn't guaranteed, and the totals
+  // are only correct once every well card has its fresh rate
+  graph.getElements().forEach(elm => { if (elm.get('type') === 's.Sum') sumPanel(elm, graph) })
   animateLinks(graph, ctrlPct, linkLive)
 }
