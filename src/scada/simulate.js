@@ -2,7 +2,7 @@
 // Auto-generates drifting demo values and animates pipe flow based on the
 // pipe's SOURCE element state (simple source-check, not a full upstream chain).
 import { clamp, drift, rnd, state } from '../composables/usePlantData'
-import { arc } from './shapes'
+import { arcSeg, needlePoint, tickPoint } from './shapes'
 
 // curated live tags from the plant data singleton — bindable to tanks (%) and gauges (value)
 export const TAGS = [
@@ -88,6 +88,35 @@ function gaugePressure(gaugeElm, graph, nodeFlow, ctrlPct) {
   return null
 }
 
+// paint the needle + value text for a gauge's CURRENT value — shared by layoutGaugeBands
+// (initial paint at creation/load, using whatever value is already set) and gauge() (every
+// sim tick, using the freshly computed live value). Keeping this in one place means the two
+// call sites can never draw the needle differently.
+function paintNeedle(elm, v, lo, hi) {
+  const frac = hi > lo ? (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) : 0
+  const [nx, ny] = needlePoint(frac)
+  elm.attr({ needle: { x2: nx, y2: ny }, val: { text: Number(v).toFixed(1) } })
+}
+
+// static dial layout — 3 color-band arcs + 5 tick labels, derived from simMin/simMax and the
+// bandYellow/bandRed % thresholds. Called on gauge creation and whenever the range/thresholds
+// change (property panel) — NOT every sim tick, since none of this depends on the live value.
+export function layoutGaugeBands(elm) {
+  if (elm.get('type') !== 's.PG') return
+  const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
+  const yFrac = Math.max(0, Math.min(1, (elm.get('bandYellow') ?? 60) / 100))
+  const rFrac = Math.max(yFrac, Math.min(1, (elm.get('bandRed') ?? 85) / 100))
+  elm.attr({ bandG: { d: arcSeg(0, yFrac) }, bandY: { d: arcSeg(yFrac, rFrac) }, bandR: { d: arcSeg(rFrac, 1) } })
+  for (let i = 0; i < 5; i++) {
+    const f = i / 4
+    const [x, y] = tickPoint(f)
+    const v = lo + (hi - lo) * f
+    const anchor = x < 48 - 3 ? 'end' : x > 48 + 3 ? 'start' : 'middle'
+    elm.attr('tick' + i, { x, y, textAnchor: anchor, text: String(Math.round(v * 10) / 10) })
+  }
+  paintNeedle(elm, elm.get('value') ?? lo, lo, hi)
+}
+
 function gauge(elm, graph, nodeFlow, ctrlPct) {
   const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
   const tag = elm.get('tag')
@@ -95,9 +124,7 @@ function gauge(elm, graph, nodeFlow, ctrlPct) {
   if (v == null) v = 0
   v = Math.max(lo, Math.min(hi, v))
   elm.set('value', v, { silent: true })
-  const frac = hi > lo ? (v - lo) / (hi - lo) : 0
-  const col = frac > 0.85 ? '#dc2626' : '#16a34a'
-  elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
+  paintNeedle(elm, v, lo, hi)
 }
 
 // flow meter: walk the flow-pipe network from the meter; a running pump reachable

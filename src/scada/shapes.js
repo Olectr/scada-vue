@@ -12,15 +12,25 @@ export const STEEL = { type: 'linearGradient', stops: [
 const portGrp = (magnet) => ({ position: { name: 'absolute' }, attrs: { circle: { r: 7, fill: '#cfd6de', stroke: '#8a929c', strokeWidth: 1.5, magnet } }, markup: svg`<circle @selector="circle"/>` })
 export const portsCfg = (items, magnet = 'passive') => ({ groups: { p: portGrp(magnet) }, items: items.map(i => ({ group: 'p', id: i.id, args: { x: i.x, y: i.y } })) })
 
-// gauge arc helper
+// gauge dial geometry — shared by the color-band arcs (layoutGaugeBands) and the needle
+// (gauge()), both in simulate.js. A0/SWEEP define a 280° dial opening at the top (like a
+// speedometer); frac is the live value's position in [0,1] across simMin..simMax.
 const A0 = 130, SWEEP = 280, R = 40, CX = 48, CY = 48
-export function arc(frac) {
-  const a0 = A0, a1 = A0 + SWEEP * Math.max(0, Math.min(1, frac))
-  const p = (deg) => [CX + R * Math.cos(deg * Math.PI / 180), CY + R * Math.sin(deg * Math.PI / 180)]
-  const [x0, y0] = p(a0), [x1, y1] = p(a1)
-  const large = (a1 - a0) > 180 ? 1 : 0
-  return `M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1}`
+function dialPoint(frac, radius) {
+  const deg = A0 + SWEEP * Math.max(0, Math.min(1, frac))
+  return [CX + radius * Math.cos(deg * Math.PI / 180), CY + radius * Math.sin(deg * Math.PI / 180)]
 }
+// path for the arc between two fractions of the dial sweep (used for each color band)
+export function arcSeg(f0, f1, radius = R) {
+  const c0 = Math.max(0, Math.min(1, f0)), c1 = Math.max(0, Math.min(1, f1))
+  const [x0, y0] = dialPoint(c0, radius), [x1, y1] = dialPoint(c1, radius)
+  const large = SWEEP * (c1 - c0) > 180 ? 1 : 0
+  return `M ${x0} ${y0} A ${radius} ${radius} 0 ${large} 1 ${x1} ${y1}`
+}
+// needle tip position for a given value fraction
+export function needlePoint(frac, radius = R - 6) { return dialPoint(frac, radius) }
+// tick label position just outside the dial rim
+export function tickPoint(frac, radius = R + 14) { return dialPoint(frac, radius) }
 
 // NOTE (resizable components): shapes listed in SCALE_BASE below draw their art in fixed
 // base-size coordinates inside a 'sc' wrapper group; resizing applies scale() on that group.
@@ -77,11 +87,19 @@ export const Zone = joint.dia.Element.define('s.Zone', { size: { width: 110, hei
 } }, { markup: svg`<path @selector="flag"/><text @selector="name"/>` })
 
 export const PGauge = joint.dia.Element.define('s.PG', { size: { width: 96, height: 96 }, attrs: {
-  bgArc: { d: '', fill: 'none', stroke: '#e2e8f0', strokeWidth: 9, strokeLinecap: 'round' },
-  fgArc: { d: '', fill: 'none', stroke: '#dc2626', strokeWidth: 9, strokeLinecap: 'round' },
+  bandG: { d: '', fill: 'none', stroke: '#16a34a', strokeWidth: 9, strokeLinecap: 'butt' },
+  bandY: { d: '', fill: 'none', stroke: '#f59e0b', strokeWidth: 9, strokeLinecap: 'butt' },
+  bandR: { d: '', fill: 'none', stroke: '#dc2626', strokeWidth: 9, strokeLinecap: 'butt' },
+  tick0: { x: 0, y: 0, textAnchor: 'middle', fill: '#8592a1', fontSize: 9, text: '' },
+  tick1: { x: 0, y: 0, textAnchor: 'middle', fill: '#8592a1', fontSize: 9, text: '' },
+  tick2: { x: 0, y: 0, textAnchor: 'middle', fill: '#8592a1', fontSize: 9, text: '' },
+  tick3: { x: 0, y: 0, textAnchor: 'middle', fill: '#8592a1', fontSize: 9, text: '' },
+  tick4: { x: 0, y: 0, textAnchor: 'middle', fill: '#8592a1', fontSize: 9, text: '' },
+  needle: { x1: 48, y1: 48, x2: 48, y2: 48, stroke: '#1f2d3d', strokeWidth: 3, strokeLinecap: 'round' },
+  hub: { cx: 48, cy: 48, r: 5, fill: '#1f2d3d' },
   unit: { x: 48, y: 44, textAnchor: 'middle', fill: '#6b7c8f', fontSize: 12 },
   val: { x: 48, y: 70, textAnchor: 'middle', fill: '#1f2d3d', fontSize: 24, fontWeight: 'bold' },
-} }, { markup: svg`<path @selector="bgArc"/><path @selector="fgArc"/><text @selector="unit">Ⓟ bar</text><text @selector="val"/>` })
+} }, { markup: svg`<path @selector="bandG"/><path @selector="bandY"/><path @selector="bandR"/><text @selector="tick0"/><text @selector="tick1"/><text @selector="tick2"/><text @selector="tick3"/><text @selector="tick4"/><line @selector="needle"/><circle @selector="hub"/><text @selector="unit">Ⓟ bar</text><text @selector="val"/>` })
 
 // New: control (builder). The visible widget is an HTML panel overlay (slider +
 // open/close); the element itself is an invisible data/anchor cell (position,
