@@ -2,7 +2,7 @@
 // Auto-generates drifting demo values and animates pipe flow based on the
 // pipe's SOURCE element state (simple source-check, not a full upstream chain).
 import { clamp, drift, rnd, state } from '../composables/usePlantData'
-import { arc } from './shapes'
+import { arcSeg, needlePoint, tickPoint } from './shapes'
 
 // curated live tags from the plant data singleton — bindable to tanks (%) and gauges (value)
 export const TAGS = [
@@ -41,8 +41,14 @@ function tank(elm, isHopper, inflow, outflow) {
     else lvl = lvl < 90 ? clamp(lvl + rnd(1, 2.5), 8, 95) : drift(lvl, 90, 95, 1.2) // idle: gently climb into 90-95 mock band
   }
   elm.set('level', lvl, { silent: true })
-  if (isHopper) elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
-  else { const h = elm.size().height - 72; elm.attr('fill', { y: 36 + h * (1 - lvl / 100), height: h * lvl / 100 }) }
+  // art lives in base-size coords inside the 'sc' scale group — never use elm.size() here
+  if (isHopper) {
+    elm.attr('fill', { y: 30 + 78 * (1 - lvl / 100), height: 78 * lvl / 100 })
+  } else {
+    const y = 36 + 178 * (1 - lvl / 100), h = 178 * lvl / 100
+    elm.attr('fill', { y, height: h })
+    elm.attr('valText', { y: y + h / 2 + 6, text: Math.round(lvl) + '%' }) // centered readout in the fill
+  }
 }
 
 // Visual-only helpers (no value drift) — shared so the builder's edit-mode
@@ -82,6 +88,35 @@ function gaugePressure(gaugeElm, graph, nodeFlow, ctrlPct) {
   return null
 }
 
+// paint the needle + value text for a gauge's CURRENT value — shared by layoutGaugeBands
+// (initial paint at creation/load, using whatever value is already set) and gauge() (every
+// sim tick, using the freshly computed live value). Keeping this in one place means the two
+// call sites can never draw the needle differently.
+function paintNeedle(elm, v, lo, hi) {
+  const frac = hi > lo ? (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) : 0
+  const [nx, ny] = needlePoint(frac)
+  elm.attr({ needle: { x2: nx, y2: ny }, val: { text: Number(v).toFixed(1) } })
+}
+
+// static dial layout — 3 color-band arcs + 5 tick labels, derived from simMin/simMax and the
+// bandYellow/bandRed % thresholds. Called on gauge creation and whenever the range/thresholds
+// change (property panel) — NOT every sim tick, since none of this depends on the live value.
+export function layoutGaugeBands(elm) {
+  if (elm.get('type') !== 's.PG') return
+  const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
+  const yFrac = Math.max(0, Math.min(1, (elm.get('bandYellow') ?? 60) / 100))
+  const rFrac = Math.max(yFrac, Math.min(1, (elm.get('bandRed') ?? 85) / 100))
+  elm.attr({ bandG: { d: arcSeg(0, yFrac) }, bandY: { d: arcSeg(yFrac, rFrac) }, bandR: { d: arcSeg(rFrac, 1) } })
+  for (let i = 0; i < 5; i++) {
+    const f = i / 4
+    const [x, y] = tickPoint(f)
+    const v = lo + (hi - lo) * f
+    const anchor = x < 48 - 3 ? 'end' : x > 48 + 3 ? 'start' : 'middle'
+    elm.attr('tick' + i, { x, y, textAnchor: anchor, text: String(Math.round(v * 10) / 10) })
+  }
+  paintNeedle(elm, elm.get('value') ?? lo, lo, hi)
+}
+
 function gauge(elm, graph, nodeFlow, ctrlPct) {
   const lo = elm.get('simMin') ?? 0, hi = elm.get('simMax') ?? 8
   const tag = elm.get('tag')
@@ -89,9 +124,7 @@ function gauge(elm, graph, nodeFlow, ctrlPct) {
   if (v == null) v = 0
   v = Math.max(lo, Math.min(hi, v))
   elm.set('value', v, { silent: true })
-  const frac = hi > lo ? (v - lo) / (hi - lo) : 0
-  const col = frac > 0.85 ? '#dc2626' : '#16a34a'
-  elm.attr({ bgArc: { d: arc(1) }, fgArc: { d: arc(frac), stroke: col }, val: { text: v.toFixed(1) } })
+  paintNeedle(elm, v, lo, hi)
 }
 
 // flow meter: walk the flow-pipe network from the meter; a running pump reachable
@@ -142,7 +175,24 @@ function custom(elm) {
     const lvl = drift(elm.get('level') ?? (lo + hi) / 2, lo, hi, Math.max(0.5, (hi - lo) / 50))
     elm.set('level', lvl, { silent: true })
     const frac = hi > lo ? (lvl - lo) / (hi - lo) : 0
-    elm.attr('fill', { opacity: 0.45, y: 3 + (h - 6) * (1 - frac), height: (h - 6) * frac })
+    if (elm.get('svgBody')) {
+      // AI-drawn body: animate the fill inside the declared liquid-interior zone (0..1 fractions of the ART,
+      // not the element box — the drawing is letterboxed/centered when aspect ratios differ)
+      const z = elm.get('levelZone')
+      if (z && z.w > 0 && z.h > 0) {
+        const w = elm.size().width
+        const vb = elm.get('svgVB')
+        let ox = 0, oy = 0, aw = w, ah = h
+        if (vb && vb.w > 0 && vb.h > 0) {
+          const s = Math.min(w / vb.w, h / vb.h)
+          aw = vb.w * s; ah = vb.h * s
+          ox = (w - aw) / 2; oy = (h - ah) / 2
+        }
+        elm.attr('fill', { opacity: 0.5, rx: 2, x: ox + z.x * aw, width: z.w * aw, y: oy + (z.y + z.h * (1 - frac)) * ah, height: z.h * frac * ah })
+      } else elm.attr('fill/opacity', 0)
+    } else {
+      elm.attr('fill', { opacity: 0.45, y: 3 + (h - 6) * (1 - frac), height: (h - 6) * frac })
+    }
     elm.attr('val', { opacity: 1, text: Math.round(frac * 100) + '%' })
   } else if (beh === 'meter') {
     const lo = elm.get('vmin') ?? 0, hi = elm.get('vmax') ?? 10
@@ -154,6 +204,48 @@ function custom(elm) {
   } else if (beh === 'openclose') {
     elm.attr('ind', { opacity: 1, fill: elm.get('open') ? '#16a34a' : '#cbd5e1' })
   }
+}
+
+// injection well card: a well only injects while injection water actually reaches it
+// (fed comes from the solved pipe network), so stopping a pump or closing a valve
+// upstream drops this card — and therefore the summary totals — to zero.
+function wellCard(elm, fed) {
+  const lo = elm.get('simMin') ?? 20, hi = elm.get('simMax') ?? 90
+  const rate = fed ? drift(elm.get('rate') ?? (lo + hi) / 2, lo, hi, Math.max(0.5, (hi - lo) / 25)) : 0
+  elm.set('rate', rate, { silent: true })
+  elm.attr('rate/text', Math.round(rate) + ' m³/h')
+}
+
+// injection summary: both rows are summed from the well cards on screen — total injection
+// and the produced-water share of it. Call this AFTER every well has ticked.
+export function sumPanel(elm, graph) {
+  let total = 0, prod = 0
+  graph.getElements().forEach(w => {
+    if (w.get('type') !== 's.Well') return
+    const r = Number(w.get('rate')) || 0
+    total += r
+    if (w.get('produced')) prod += r
+  })
+  elm.set('total', total, { silent: true })
+  elm.set('prod', prod, { silent: true })
+  elm.attr('v1/text', String(Math.round(total)))
+  elm.attr('v2/text', String(Math.round(prod)))
+}
+
+// status dot: green/red from the bound pump or valve, amber when unbound (or bound to
+// something with no open/closed state, e.g. a deleted target or a passive component).
+export function setDotVisual(elm, graph) {
+  const t = elm.get('watch') ? graph.getCell(elm.get('watch')) : null
+  const ty = t && t.get('type'), beh = t && t.get('behavior')
+  const on = ty === 's.Pump' ? !!t.get('on')
+    : ty === 's.Valve' ? !!t.get('open')
+    : ty === 's.Custom' && beh === 'onoff' ? !!t.get('on')
+    : ty === 's.Custom' && beh === 'openclose' ? !!t.get('open')
+    : null
+  elm.attr('dot', {
+    fill: on === null ? '#f59e0b' : on ? '#22c55e' : '#ef4444',
+    rx: elm.get('round') ? elm.size().width / 2 : 3,
+  })
 }
 
 function quality(elm) {
@@ -218,7 +310,7 @@ function propagateFlow(graph, ctrlPct) {
     return true
   }
   // passive instruments draw no volumetric flow → never a hydraulic sink, even at a dead end
-  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1, 's.Note': 1 }
+  const NON_SINK = { 's.PG': 1, 's.Flow': 1, 's.Tap': 1, 's.Quality': 1, 's.Control': 1, 's.Note': 1, 's.Sum': 1, 's.Dot': 1 }
   // SUPPLY forward
   let changed = true, guard = 0
   while (changed && guard < 200) {
@@ -272,6 +364,8 @@ export function refreshLinks(graph) {
   const ctrlPct = controlMap(graph)
   const { linkLive } = propagateFlow(graph, ctrlPct)
   animateLinks(graph, ctrlPct, linkLive)
+  // status dots watch pump/valve state, which is exactly what edit-mode toggles change
+  graph.getElements().forEach(e => { if (e.get('type') === 's.Dot') setDotVisual(e, graph) })
 }
 
 export function simulateTick(graph) {
@@ -296,7 +390,12 @@ export function simulateTick(graph) {
       case 's.Tap': tap(elm, graph, flowing, ctrlPct); break
       case 's.Quality': quality(elm); break
       case 's.Custom': custom(elm); break
+      case 's.Well': wellCard(elm, !!flowing[elm.id]); break
+      case 's.Dot': setDotVisual(elm, graph); break
     }
   })
+  // summary panels run in a second pass — element order isn't guaranteed, and the totals
+  // are only correct once every well card has its fresh rate
+  graph.getElements().forEach(elm => { if (elm.get('type') === 's.Sum') sumPanel(elm, graph) })
   animateLinks(graph, ctrlPct, linkLive)
 }

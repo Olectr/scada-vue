@@ -1,12 +1,17 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as joint from '@joint/core'
-import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS } from '../scada/shapes'
-import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, TAGS } from '../scada/simulate'
+import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, WellCard, SumPanel, StatusDot, SCALE_BASE, applyScale } from '../scada/shapes'
+import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, layoutGaugeBands, setDotVisual, sumPanel, TAGS } from '../scada/simulate'
+import { PID_DEFS } from '../scada/pidSymbols'
 import TrendChart from '../components/TrendChart.vue'
-import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints } from 'lucide-vue-next'
-const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag }
+import { useAuth } from '../composables/useAuth'
+import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Unlock, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints, Menu, Search, ChevronLeft, ChevronRight, ChevronDown, ShoppingBasket, MoreHorizontal, LogOut, Sigma, Circle } from 'lucide-vue-next'
+const { user, logout } = useAuth()
+const props = defineProps({ clock: { type: String, default: '' }, today: { type: String, default: '' }, version: { type: String, default: '' } })
+const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag, well: Droplets, sum: Sigma, dot: Circle }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
+const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidHxInline: Merge, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
 // metric key(s) each instrument preset exposes for external panel/DER/param linkage (see defaultMetrics)
 const INSTRUMENT_METRIC_KEYS = { manualValve: ['open'], nrv: ['open'], pressureTransmitter: ['pressure'], instValve: ['open'], turbidity: ['turbidity'], flowTransmitter: ['flow', 'total'], radarLevel: ['level'], chlorineAnalyzer: ['chlorine'], hydrostaticLevel: ['level'] }
 
@@ -90,6 +95,264 @@ async function loadTemplate(kind) {
     const p1 = mk('pump'); p1.position(420, 110); const z1 = mk('zone'); z1.position(700, 120)
     const p2 = mk('pump'); p2.position(420, 320); const z2 = mk('zone'); z2.position(700, 330)
     link(t1, 'top', p1, 'l'); link(p1, 'r', z1, 'p'); link(t1, 'bot', p2, 'l'); link(p2, 'r', z2, 'p')
+  } else if (kind === 'chemical') {
+    // eigen-style Chemical Distillation P&ID — crude feed → C150 column → overhead
+    // condensing (E192/H53) + reboil (E191) → bottoms draw-off (H50/H51), with a
+    // shared utility header (steam/nitrogen/hot+cold water/vacuum/vent).
+    const STEAM = '#ef4444', NITRO = '#8b93f5', WATER = '#22c55e', VENT = '#dc2626', GREY = '#c5cdd6'
+    const pidDef = key => PID_DEFS.find(d => d.key === key)
+    const mkP = (key, x, y, over) => { const e = makeCustom({ ...pidDef(key), ...(over || {}) }, x, y); graph.addCell(e); return e }
+    const tag = (el, name) => { el.attr('name/text', name); return el }
+    const lbl = (text, x, y, color, w) => {
+      const n = new Note({ position: { x, y }, size: { width: w || 110, height: 18 },
+        attrs: { box: { fill: 'transparent', stroke: 'none' }, name: { text, fill: color || '#94a3b8', fontSize: 11, fontWeight: 700 } } })
+      graph.addCell(n); return n
+    }
+    const pipe = (s, sp, t, tp, color, width) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } })
+      l.attr('line/stroke', color || GREY); l.attr('line/strokeWidth', width || 5); l.attr('wrap/strokeWidth', (width || 5) + 5)
+      graph.addCell(l); return l
+    }
+    const leader = (s, sp, t, tp) => graph.addCell(new Leader({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } }))
+
+    // feed
+    lbl('Nitrogen ▶', 15, 60, NITRO)
+    const vH49 = tag(mkP('pidValve', 100, 30), 'H49')
+    const drumCrude = tag(mkP('pidDrum', 80, 90), 'Crude'); drumCrude.set('level', 82)
+    const pumpFeed = mk('pump'); pumpFeed.position(110, 270)
+    lbl('Steam ▶', 15, 385, STEAM)
+    const eE190 = tag(mkP('pidHxH', 40, 410), 'E190')
+    lbl('◀ Steam', 15, 465, STEAM)
+    pipe(vH49, 'right', drumCrude, 'left', GREY)
+    pipe(drumCrude, 'bottom', pumpFeed, 'l', GREY)
+    pipe(pumpFeed, 'r', eE190, 'left', GREY)
+
+    // column + tray temperatures
+    const t1 = mkP('pidTempBox', 230, 40); t1.set('value', 30.2)
+    const t2 = mkP('pidTempBox', 230, 95); t2.set('value', 29.8)
+    const t3 = mkP('pidTempBox', 230, 150); t3.set('value', 30.1)
+    const t4 = mkP('pidTempBox', 230, 205); t4.set('value', 29.9)
+    const colC150 = tag(mkP('pidColumn', 350, 30), 'C150'); colC150.set('level', 92.8)
+    leader(t1, 'right', colC150, 'left'); leader(t2, 'right', colC150, 'left')
+    leader(t3, 'right', colC150, 'left'); leader(t4, 'right', colC150, 'left')
+    pipe(eE190, 'right', colC150, 'left', GREY)
+
+    // reboil loop
+    const pumpReb = mk('pump'); pumpReb.position(345, 330)
+    const eE191 = tag(mkP('pidHxV', 480, 300), 'E191')
+    pipe(colC150, 'bottom', pumpReb, 'l', GREY)
+    pipe(pumpReb, 'r', eE191, 'bottom', GREY)
+    pipe(eE191, 'top', colC150, 'right', GREY)
+
+    // overhead condensing
+    lbl('Hot Water', 460, 10, WATER)
+    const eE192 = tag(mkP('pidCooler', 450, 40), 'E192')
+    const drumH53 = tag(mkP('pidLevelBox', 590, 50), 'H53'); drumH53.set('level', 45)
+    pipe(colC150, 'top', eE192, 'left', GREY)
+    pipe(eE192, 'right', drumH53, 'left', GREY)
+
+    // utility header
+    const vHWR = tag(mkP('pidValve', 710, 50), 'HWR'); lbl('HWR ▶', 790, 55, WATER)
+    const vCWR = tag(mkP('pidValve', 710, 95), 'CWR'); lbl('CWR ▶', 790, 100, WATER)
+    const vCWS = tag(mkP('pidValve', 710, 140), 'CWS'); lbl('CWS ▶', 790, 145, WATER)
+    const vHWS = tag(mkP('pidValve', 710, 185), 'HWS'); lbl('HWS ▶', 790, 190, WATER)
+    const vN2 = tag(mkP('pidValve', 710, 230), 'N2'); lbl('Nitrogen ▶', 790, 235, NITRO)
+    const vVAC = tag(mkP('pidValve', 710, 275), 'VAC'); lbl('VAC ▶', 790, 280, GREY)
+    const vVENT = tag(mkP('pidValve', 710, 320, { color: '#fee2e2', border: '#dc2626' }), 'Vent'); lbl('Vent ▶', 790, 325, VENT)
+    lbl('T120', 870, 325, GREY, 60)
+    pipe(drumH53, 'right', vHWR, 'left', WATER); pipe(drumH53, 'right', vCWR, 'left', WATER)
+    pipe(drumH53, 'right', vCWS, 'left', WATER); pipe(drumH53, 'right', vHWS, 'left', WATER)
+    pipe(drumH53, 'right', vN2, 'left', NITRO); pipe(drumH53, 'right', vVAC, 'left', GREY)
+    pipe(drumH53, 'right', vVENT, 'left', VENT)
+
+    // bottoms draw-off
+    const drumH50 = tag(mkP('pidAccum', 600, 430, { behavior: 'level' }), 'H50'); drumH50.set('level', 52)
+    const drumH51 = tag(mkP('pidAccum', 710, 430, { behavior: 'level' }), 'H51'); drumH51.set('level', 51)
+    const v50 = mkP('pidValve', 600, 580); const v51 = mkP('pidValve', 710, 580)
+    pipe(pumpReb, 'l', drumH50, 'top', GREY); pipe(drumH50, 'top', drumH51, 'top', GREY)
+    pipe(drumH50, 'bottom', v50, 'left', GREY); lbl('B99', 680, 585, GREY, 50)
+    pipe(drumH51, 'bottom', v51, 'left', GREY); lbl('H84', 790, 585, GREY, 50)
+
+    // product streams
+    lbl('Residues ◀', 15, 470, GREY); const vRes = mkP('pidValve', 150, 465)
+    lbl('Recycle ◀', 15, 510, GREY); const vRec = mkP('pidValve', 150, 505)
+    lbl('Storage ◀', 15, 550, NITRO); const vSto = mkP('pidValve', 150, 545)
+    lbl('Crude ◀', 15, 590, GREY); const pumpOut = mk('pump'); pumpOut.position(140, 580)
+    pipe(pumpReb, 'l', vRes, 'right', GREY); pipe(pumpReb, 'l', vRec, 'right', GREY); pipe(pumpReb, 'l', vSto, 'right', NITRO)
+    pipe(pumpOut, 'r', v50, 'right', GREY)
+  } else if (kind === 'gas') {
+    // eigen-style Gas Treatment train — 4-vessel separator cascade (T-001..T-004), each stage
+    // cooled by an inline exchanger, with a live pressure gauge + temp readout per stage, an
+    // ejector skid off T-003, and a metering/export header after T-004.
+    const GREY = '#c5cdd6', GAS = '#f59e0b'
+    const pidDef = key => PID_DEFS.find(d => d.key === key)
+    const mkP = (key, x, y, over) => { const e = makeCustom({ ...pidDef(key), ...(over || {}) }, x, y); graph.addCell(e); return e }
+    const skid = (label, x, y, w, h) => {
+      const e = makeCustom({ label, shape: 'box', w, h, color: '#eef2f6', border: '#4b5866' }, x, y)
+      e.attr('name/text', label); graph.addCell(e); return e
+    }
+    const lbl = (text, x, y, color, w) => {
+      const n = new Note({ position: { x, y }, size: { width: w || 230, height: 18 },
+        attrs: { box: { fill: 'transparent', stroke: 'none' }, name: { text, fill: color || '#94a3b8', fontSize: 12, fontWeight: 700 } } })
+      graph.addCell(n); return n
+    }
+    const pipe = (s, sp, t, tp, color, width) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } })
+      l.attr('line/stroke', color || GREY); l.attr('line/strokeWidth', width || 5); l.attr('wrap/strokeWidth', (width || 5) + 5)
+      graph.addCell(l); return l
+    }
+    const route = (s, sp, x, y, text, color) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { x, y } })
+      l.attr('wrap/stroke', color || GREY); l.attr('wrap/strokeWidth', 4)
+      l.attr('wrap/targetMarker', { type: 'path', d: 'M 10 -6 0 0 10 6 Z', fill: color || GREY })
+      l.attr('line/opacity', 0)
+      graph.addCell(l); lbl(text, x + 14, y - 9, color || GREY)
+    }
+    const tank4 = (name, x, lvl) => {
+      const tk = new CylTank({ position: { x, y: 260 }, attrs: { name: { text: name } },
+        ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true),
+        level: lvl, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) })
+      setTankMarks(tk); graph.addCell(tk); return tk
+    }
+    const mkGauge = (x, tag, lo, hi, warn, danger) => {
+      const g = new PGauge({ position: { x, y: 20 }, attrs: { name: { text: nextName('Gauge') } },
+        value: (lo + hi) / 2, simMin: lo, simMax: hi, bandYellow: warn, bandRed: danger, tag,
+        ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) })
+      layoutGaugeBands(g); graph.addCell(g); return g
+    }
+    const temp = (x, y, val) => { const t = mkP('pidTempBox', x, y); t.set('value', val); return t }
+
+    const t1 = tank4('T-001', 40, 39)
+    const t2 = tank4('T-002', 300, 54)
+    const t3 = tank4('T-003', 560, 65)
+    const t4 = tank4('T-004', 820, 43)
+
+    mkGauge(67, 'water.prs', 0, 8, 55, 80); temp(73, 128, 25)
+    mkGauge(327, 'air.prs', 0, 10, 55, 78); temp(333, 128, 27)
+    mkGauge(587, 'boiler.bPrs', 100, 160, 60, 80); temp(593, 128, 29)
+    mkGauge(847, 'solar.irr', 500, 1000, 60, 85); temp(853, 128, 45)
+
+    const hx1 = mkP('pidHxInline', 223, 380)
+    const hx2 = mkP('pidHxInline', 483, 380)
+    const hx3 = mkP('pidHxInline', 743, 380)
+    pipe(t1, 'bot', hx1, 'left', GAS); pipe(hx1, 'right', t2, 'top', GAS)
+    pipe(t2, 'bot', hx2, 'left', GAS); pipe(hx2, 'right', t3, 'top', GAS)
+    pipe(t3, 'bot', hx3, 'left', GAS); pipe(hx3, 'right', t4, 'top', GAS)
+
+    const ejector = skid('Ejector skid', 560, 570, 150, 60)
+    pipe(t3, 'bot', ejector, 'left', GREY); pipe(ejector, 'right', t3, 'top', GREY)
+
+    const metering = skid('Metering skid', 1020, 20, 140, 56)
+    const launcher = skid('Gas export launcher', 1020, 160, 170, 56)
+    pipe(t4, 'top', metering, 'left', GAS)
+    pipe(t4, 'top', launcher, 'left', GAS)
+
+    route(t4, 'top', 1260, 40, 'To gas lift manifold', GAS)
+    route(metering, 'right', 1260, 140, 'To gas rejection system', GAS)
+    route(launcher, 'right', 1260, 240, 'To gas export pipeline', GAS)
+    route(t1, 'bot', 1260, 460, 'To 2nd stage separator heater', GREY)
+    route(t2, 'bot', 1260, 540, 'To inlet separator', GREY)
+  } else if (kind === 'reservoir') {
+    // eigen-style Reservoir Dashboard — two water-injection trains (PA-51-0010B → Reservoir B,
+    // PA-51-0010A → Reservoir C) fed from the U-29 header, produced water joining through
+    // VD-44-004 / HV-51-0274, sea discharge (SJØ) off each train, and the injection wells with
+    // a summary panel that auto-sums their rates. Status dots watch the pumps and valves.
+    const WATER = '#22d3ee', SEA = '#38bdf8'
+    const pidDef = key => PID_DEFS.find(d => d.key === key)
+    const mkP = (key, x, y, over) => { const e = makeCustom({ ...pidDef(key), ...(over || {}) }, x, y); graph.addCell(e); return e }
+    const lbl = (text, x, y, color, size, w) => {
+      const n = new Note({ position: { x, y }, size: { width: w || 160, height: (size || 12) + 6 },
+        attrs: { box: { fill: 'transparent', stroke: 'none' }, name: { text, fill: color || '#94a3b8', fontSize: size || 12, fontWeight: 700 } } })
+      graph.addCell(n); return n
+    }
+    const pipe = (s, sp, t, tp, color, width) => {
+      const l = new FlowPipe({ source: { id: s.id, port: sp }, target: { id: t.id, port: tp } })
+      l.attr('line/stroke', color || WATER); l.attr('line/strokeWidth', width || 5); l.attr('wrap/strokeWidth', (width || 5) + 5)
+      graph.addCell(l); return l
+    }
+    // pressure transmitter point — a live pressure tap with a "PT" caption, as on the reference screen
+    const pt = (x, y) => {
+      const t = new Tap({ position: { x, y }, pressure: 0,
+        ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true),
+        metrics: defaultMetrics(['pressure']) })
+      graph.addCell(t); lbl('PT', x + 30, y - 17, '#94a3b8', 11, 30); return t
+    }
+    const zoneAt = (name, x, y, px) => {
+      const z = new Zone({ position: { x, y }, attrs: { name: { text: name } }, ports: portsCfg([{ id: 'p', x: px, y: 20 }], true) })
+      graph.addCell(z); return z
+    }
+    const wellAt = (tag, x, y, lo, hi, produced) => {
+      const w = new WellCard({ position: { x, y }, attrs: { name: { text: tag } },
+        rate: (lo + hi) / 2, simMin: lo, simMax: hi, produced: !!produced,
+        ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
+      w.attr('rate/text', Math.round((lo + hi) / 2) + ' m³/h') // readable before the sim starts
+      graph.addCell(w); return w
+    }
+    const dotAt = (x, y, watched, round) => {
+      const d = new StatusDot({ position: { x, y }, watch: watched ? watched.id : null, round: !!round, metrics: defaultMetrics(['state']) })
+      graph.addCell(d); setDotVisual(d, graph); return d
+    }
+
+    lbl('Reservoir F vann', 300, 4, '#e6edf3', 18, 300)
+
+    // injection header
+    lbl('U-24', 16, 116, '#94a3b8', 12, 60)
+    const zU29 = zoneAt('U-29', 16, 140, 110)
+    const feMain = mk('flow'); feMain.position(160, 132)
+    pipe(zU29, 'p', feMain, 'l')
+
+    // train B — Reservoir B
+    const ptB1 = pt(280, 86)
+    const pumpB = mk('pump'); pumpB.position(400, 64); pumpB.attr('name/text', 'PA-51-0010B')
+    const ptB2 = pt(520, 86), ptB3 = pt(620, 86)
+    const drumB = mkP('pidDrum', 720, 35); drumB.attr('name/text', 'Reservoir B'); drumB.set('level', 64)
+    const ptB4 = pt(880, 86)
+    pipe(feMain, 'r', ptB1, 'l'); pipe(ptB1, 'r', pumpB, 'l'); pipe(pumpB, 'r', ptB2, 'l')
+    pipe(ptB2, 'r', ptB3, 'l'); pipe(ptB3, 'r', drumB, 'left'); pipe(drumB, 'right', ptB4, 'l')
+
+    // train C — Reservoir C
+    const ptC1 = pt(280, 261)
+    const pumpC = mk('pump'); pumpC.position(400, 239); pumpC.attr('name/text', 'PA-51-0010A')
+    const ptC2 = pt(520, 261), ptC3 = pt(620, 261)
+    const drumC = mkP('pidDrum', 720, 210); drumC.attr('name/text', 'Reservoir C'); drumC.set('level', 58)
+    const ptC4 = pt(880, 261)
+    pipe(feMain, 'r', ptC1, 'l'); pipe(ptC1, 'r', pumpC, 'l'); pipe(pumpC, 'r', ptC2, 'l')
+    pipe(ptC2, 'r', ptC3, 'l'); pipe(ptC3, 'r', drumC, 'left'); pipe(drumC, 'right', ptC4, 'l')
+
+    // sea discharge per train
+    const vSeaB = mk('valve'); vSeaB.position(1000, 60); vSeaB.attr('name/text', 'HV-51-0301')
+    const vSeaC = mk('valve'); vSeaC.position(1000, 380); vSeaC.attr('name/text', 'HV-51-0302')
+    const sjoB = zoneAt('SJØ', 990, 190, 0), sjoC = zoneAt('SJØ', 990, 500, 0)
+    pipe(ptB4, 'r', vSeaB, 'l', SEA); pipe(vSeaB, 'r', sjoB, 'p', SEA)
+    pipe(ptC4, 'r', vSeaC, 'l', SEA); pipe(vSeaC, 'r', sjoC, 'p', SEA)
+
+    // produced water — VD-44-004 through HV-51-0274 back into the injection header
+    const zProd = zoneAt('Produsert vann', 16, 250, 110)
+    const vdTank = mk('tank'); vdTank.position(60, 370); vdTank.attr('name/text', 'VD-44-004')
+    vdTank.set('level', 82); vdTank.set('simMin', 10); vdTank.set('simMax', 70); setTankMarks(vdTank)
+    const hv = mk('valve'); hv.position(250, 470); hv.attr('name/text', 'HV-51-0274')
+    const feProd = mk('flow'); feProd.position(370, 490)
+    pipe(zProd, 'p', vdTank, 'top'); pipe(vdTank, 'bot', hv, 'l')
+    pipe(hv, 'r', feProd, 'l'); pipe(feProd, 'r', ptC1, 'l')
+    lbl('Produsert vann', 250, 600, '#e6edf3', 14, 200)
+
+    // injection wells — A-03/A-06 take the produced-water stream, so the summary's two rows differ
+    lbl('Vanninjeksjon brønner', 1120, 436, '#94a3b8', 12, 220)
+    const wA22 = wellAt('A-22', 1330, 40, 60, 95)
+    const wA40 = wellAt('A-40', 1120, 470, 25, 40)
+    const wA02 = wellAt('A-02', 1220, 470, 70, 90)
+    const wA03 = wellAt('A-03', 1320, 470, 22, 35, true)
+    const wA06 = wellAt('A-06', 1420, 470, 75, 95, true)
+    pipe(ptB4, 'r', wA22, 'in')
+    for (const w of [wA40, wA02, wA03, wA06]) pipe(ptC4, 'r', w, 'in')
+
+    // totals auto-sum from the well cards above
+    const summary = new SumPanel({ position: { x: 560, y: 420 }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
+    graph.addCell(summary); sumPanel(summary, graph)
+
+    // status dots — live pump/valve state
+    dotAt(496, 66, pumpB, true); dotAt(496, 241, pumpC, true)
+    dotAt(1082, 96, vSeaB); dotAt(1082, 416, vSeaC); dotAt(332, 506, hv)
   }
   currentName.value = ''; selectEl(null); syncOverlays(); resetHistory()
 }
@@ -99,6 +362,7 @@ const METRIC_KEYS_BY_TYPE = {
   's.Cyl': ['level'], 's.Hopper': ['level'], 's.Pump': ['on', 'pressure', 'runtime'],
   's.Valve': ['open'], 's.PG': ['value'], 's.Control': ['pct'], 's.Tap': ['pressure'],
   's.Flow': ['flow', 'total'], 's.Quality': ['ph', 'turbidity', 'chlorine', 'dissolvedOxygen'],
+  's.Well': ['rate'], 's.Sum': ['total', 'prod'], 's.Dot': ['state'],
 }
 // upgrade cells saved with an older geometry (e.g. the tiny 22×22 dot tap) to the current shape
 function migrateCells() {
@@ -114,8 +378,17 @@ function migrateCells() {
         const oldFill = e.attr('box/fill'); if (oldFill) e.set('fillColor', oldFill)
         if (!e.get('borderColor')) e.set('borderColor', '#6366f1')
       }
+      if (e.get('svgBody') && !e.get('svgVB')) e.set('svgVB', parseSvgVB(e.get('svgBody'))) // backfill for pre-svgVB saves
       renderCustom(e) // re-apply shape/icon/colors after load
     }
+    if (e.get('type') === 's.PG') {
+      // backfill band thresholds on gauges saved before banded dials existed, then redraw
+      if (e.get('bandYellow') == null) e.set('bandYellow', 60)
+      if (e.get('bandRed') == null) e.set('bandRed', 85)
+      layoutGaugeBands(e)
+    }
+    if (e.get('type') === 's.Dot') setDotVisual(e, graph) // repaint from the bound pump/valve on load
+    applyScale(e) // re-apply per-element scale on fixed-art shapes (no-op at scale 1 / other types)
     // backfill metrics: add the panel/DER/param/value linkage for any expected key missing
     // it entirely (older exports had no metrics object at all), and add a null value
     // placeholder to any metric that predates the value field.
@@ -191,6 +464,9 @@ const palette = [
   { type: 'quality', label: 'Water Quality', ico: '🧪' },
   { type: 'chart', label: 'Chart', ico: '📈' },
   { type: 'note', label: 'Label', ico: '📝' },
+  { type: 'well', label: 'Injection Well', ico: '⛲' },
+  { type: 'sum', label: 'Injection Summary', ico: '∑' },
+  { type: 'dot', label: 'Status Dot', ico: '⬤' },
   ...INSTRUMENT_DEFS.map(def => ({ type: 'instrument', key: def.key, label: def.label, icon: INSTRUMENT_PALETTE_ICON[def.key] })),
 ]
 
@@ -244,7 +520,7 @@ function makeEl(type, key) {
     case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95, metrics: defaultMetrics(['level']) })
     case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2, metrics: defaultMetrics(['on', 'pressure', 'runtime']) })
     case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true, metrics: defaultMetrics(['open']) })
-    case 'gauge': return new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) })
+    case 'gauge': { const g = new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) }); layoutGaugeBands(g); return g }
     case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true, metrics: defaultMetrics(['pct']) })
     case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
     case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true), metrics: defaultMetrics(['pressure']) })
@@ -252,6 +528,9 @@ function makeEl(type, key) {
     case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
     case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
     case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } }, metrics: defaultMetrics(['label']) })
+    case 'well': return new WellCard({ position: { x, y }, attrs: { name: { text: nextName('Well') } }, rate: 40, simMin: 20, simMax: 90, produced: false, ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
+    case 'sum': return new SumPanel({ position: { x, y }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
+    case 'dot': return new StatusDot({ position: { x, y }, watch: null, round: false, metrics: defaultMetrics(['state']) })
     case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true), metrics: defaultMetrics(INSTRUMENT_METRIC_KEYS[key] || []) }) }
   }
 }
@@ -274,20 +553,29 @@ function deleteCustomComp(id) { customComps.value = customComps.value.filter(c =
 function renderCustom(el) {
   const w = el.size().width, h = el.size().height, shape = el.get('shape') || 'box'
   const fill = el.get('fillColor') || '#e0e7ff', border = el.get('borderColor') || '#6366f1'
-  el.attr('bodyRect/opacity', shape === 'box' ? 1 : 0)
-  el.attr('bodyEllipse/opacity', shape === 'circle' ? 1 : 0)
-  const usePath = shape === 'diamond' || shape === 'triangle' || shape === 'cylinder'
-  el.attr('bodyPath/opacity', usePath ? 1 : 0)
-  if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
-  const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
-  el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
-  const g = el.get('glyph') || ''
-  if (g) {
-    el.attr('glyph', { opacity: 1, d: g, stroke: border, transform: glyphTransform(w, h) })
-    el.attr('icon/text', '')
+  const svgBody = el.get('svgBody') || ''
+  if (svgBody) {
+    // AI-drawn realistic body replaces the primitive shape + glyph/emoji entirely
+    el.attr('bodyRect/opacity', 0); el.attr('bodyEllipse/opacity', 0); el.attr('bodyPath/opacity', 0)
+    el.attr('svgImg', { opacity: 1, href: svgDataUri(svgBody), width: w, height: h })
+    el.attr('glyph/opacity', 0); el.attr('icon/text', ''); el.attr('fill/opacity', 0)
   } else {
-    el.attr('glyph/opacity', 0)
-    el.attr('icon/text', el.get('icon') || '')
+    el.attr('svgImg/opacity', 0)
+    el.attr('bodyRect/opacity', shape === 'box' ? 1 : 0)
+    el.attr('bodyEllipse/opacity', shape === 'circle' ? 1 : 0)
+    const usePath = shape === 'diamond' || shape === 'triangle' || shape === 'cylinder'
+    el.attr('bodyPath/opacity', usePath ? 1 : 0)
+    if (usePath) el.attr('bodyPath/d', customPath(shape, w, h))
+    const bsel = shape === 'circle' ? 'bodyEllipse' : usePath ? 'bodyPath' : 'bodyRect'
+    el.attr(bsel + '/fill', fill); el.attr(bsel + '/stroke', border)
+    const g = el.get('glyph') || ''
+    if (g) {
+      el.attr('glyph', { opacity: 1, d: g, stroke: border, transform: glyphTransform(w, h) })
+      el.attr('icon/text', '')
+    } else {
+      el.attr('glyph/opacity', 0)
+      el.attr('icon/text', el.get('icon') || '')
+    }
   }
   const beh = el.get('behavior')
   if (beh === 'onoff' || beh === 'openclose') {
@@ -310,7 +598,11 @@ function makeCustom(def, x, y) {
   const el = new Custom({
     position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
     attrs: { name: { text: nextName(def.label || 'Custom') } },
-    shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
+    shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', svgBody: def.svg || '',
+    svgVB: def.svgVB || (def.svg ? parseSvgVB(def.svg) : null),
+    // older AI defs saved before levelZone existed get an approximate centered zone
+    levelZone: def.levelZone || (def.behavior === 'level' && def.svg ? { x: 0.2, y: 0.15, w: 0.6, h: 0.7 } : null),
+    fillColor: def.color || '#e0e7ff', borderColor: def.border || '#6366f1',
     behavior: def.behavior || 'static', vmin: def.vmin ?? 0, vmax: def.vmax ?? 100, unit: def.unit || '',
     on: true, open: true, level: 60, value: ((def.vmin ?? 0) + (def.vmax ?? 100)) / 2,
     ports: portsCfg(customSidePorts(def, w, h), true),
@@ -348,22 +640,85 @@ const AI_COMP_SYSTEM = `You design components for an industrial/water SCADA scre
 
 Field semantics:
 - label: short display name (max ~18 chars).
-- shape: body outline. cylinder suits vessels/tanks, circle suits pumps/blowers/instruments, diamond suits valves, triangle suits hoppers/funnels, box is the general default.
-- color/border: hex colors that read well on a light canvas; pick hues that hint at the medium (blue=water, green=chemical ok, amber=power/heat, slate=mechanical).
-- w/h: px, keep within 60-180 x 40-140 unless the part is clearly large (vessel) or small (sensor).
+- shape: fallback body outline, only shown if svg is empty. cylinder=vessels, circle=pumps/instruments, diamond=valves, box=default.
+- color/border: hex colors; border is also used for the selection outline.
+- w/h: px, keep within 60-200 x 40-160 unless the part is clearly large (vessel) or small (sensor).
 - behavior: onoff for powered equipment that starts/stops (gates flow when off), openclose for valves/gates, level for vessels that fill/drain (shows %), meter for instruments showing a live value, static for passive parts.
 - vmin/vmax/unit: sensible range + engineering unit for meter (e.g. 0-10 bar, 0-14 pH, 0-200 m3/h). For level use 0-100. Otherwise 0/100 and empty unit.
 - sides: ports where pipes connect. Inline equipment: left+right. Vessels: top+bottom. Sensors that tap a line: bottom or left only.
-- glyph: a single SVG path "d" string drawn in a 24x24 box — simple line-art like P&ID symbols, stroke-only (never filled), 2px stroke look. Example pump glyph: "M7,8 A5,5 0 1,0 17,8 A5,5 0 1,0 7,8 M8,8 L15,8 M12,5 L15,8 L12,11 M4,18 L20,18". Prefer a glyph; set icon to a fallback emoji anyway.
+- svg: THE MAIN VISUAL — a complete, realistic SVG drawing of the part, professional HMI-symbol style. Requirements:
+  * starts with <svg viewBox="0 0 W H" xmlns="http://www.w3.org/2000/svg"> where W:H matches w:h; no width/height attributes.
+  * realistic industrial look: metallic 3D shading via linearGradient/radialGradient (steel greys tinted toward the medium: blue=water, green=chemical, amber=power/heat), highlights, darker base shadow, physical details (flanges, bolts, pipe stubs, casing ribs, sight glass) where natural.
+  * flat cartoon boxes are NOT acceptable; draw the actual equipment silhouette.
+  * self-contained: no text, no <script>, no external hrefs/images, defs ids short and unique-ish (e.g. "g1","g2").
+  * keep under 3500 characters.
+  Example of the expected style (a metal centrifugal pump — use as quality reference, do not copy blindly):
+  <svg viewBox="0 0 96 60" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2f6"/><stop offset=".45" stop-color="#a8b4c0"/><stop offset="1" stop-color="#5d6b79"/></linearGradient><radialGradient id="g2" cx=".35" cy=".35" r=".8"><stop offset="0" stop-color="#dfe7ee"/><stop offset=".7" stop-color="#8b98a6"/><stop offset="1" stop-color="#4d5a68"/></radialGradient></defs><rect x="6" y="46" width="84" height="8" rx="2" fill="url(#g1)" stroke="#3f4a55" stroke-width="1"/><rect x="58" y="14" width="30" height="24" rx="3" fill="url(#g1)" stroke="#3f4a55"/><circle cx="30" cy="30" r="18" fill="url(#g2)" stroke="#3f4a55" stroke-width="1.2"/><circle cx="30" cy="30" r="7" fill="#37424e"/><rect x="26" y="4" width="8" height="10" fill="url(#g1)" stroke="#3f4a55"/><rect x="22" y="2" width="16" height="4" rx="1" fill="#6d7a88" stroke="#3f4a55"/></svg>
+- levelZone: only for behavior="level": the rectangle IN THE SAME viewBox UNITS as svg that covers the vessel's liquid interior — a translucent green fill animates bottom-up inside exactly this region at runtime. Draw that interior area light/semi-transparent (like a sight glass or open vessel window) so the fill reads as liquid. Region must sit fully inside the vessel walls. For other behaviors use {"x":0,"y":0,"w":0,"h":0}.
+- glyph: leave "" (legacy field).
+- icon: one fallback emoji.
 
 Respond with ONLY one JSON object — no markdown fences, no commentary — with exactly these keys:
-{"label": string, "shape": "box"|"circle"|"diamond"|"triangle"|"cylinder", "icon": string (one emoji), "color": "#rrggbb", "border": "#rrggbb", "w": integer, "h": integer, "behavior": "static"|"onoff"|"openclose"|"level"|"meter", "vmin": number, "vmax": number, "unit": string, "sides": {"top": boolean, "bottom": boolean, "left": boolean, "right": boolean}, "glyph": string}`
+{"label": string, "shape": "box"|"circle"|"diamond"|"triangle"|"cylinder", "icon": string (one emoji), "color": "#rrggbb", "border": "#rrggbb", "w": integer, "h": integer, "behavior": "static"|"onoff"|"openclose"|"level"|"meter", "vmin": number, "vmax": number, "unit": string, "sides": {"top": boolean, "bottom": boolean, "left": boolean, "right": boolean}, "svg": string, "levelZone": {"x": number, "y": number, "w": number, "h": number}, "glyph": string}`
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-4.5'
+const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-5'
 const aiComp = reactive({ open: false, prompt: '', loading: false, error: '', result: null })
 function openAiComp() { aiComp.open = true; aiComp.error = '' }
+const AI_EXAMPLES = [
+  'Stainless steel storage tank with level',
+  'Centrifugal pump with motor, on/off',
+  'Motorized butterfly valve, open/close',
+  'Electromagnetic flow meter 0–500 m³/h',
+  'Chlorine dosing tank with level',
+  'UV disinfection unit, on/off',
+]
+// pull the first balanced JSON object out of model text (reasoning models wrap it in <think> blocks / prose)
+function extractJson(text) {
+  const t = String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '')
+  const start = t.indexOf('{')
+  if (start === -1) return null
+  let depth = 0, inStr = false, esc = false
+  for (let i = start; i < t.length; i++) {
+    const c = t[i]
+    if (esc) { esc = false; continue }
+    if (c === '\\') { esc = inStr; continue }
+    if (c === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (c === '{') depth++
+    else if (c === '}') { depth--; if (!depth) { try { return JSON.parse(t.slice(start, i + 1)) } catch { return null } } }
+  }
+  return null
+}
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 const GLYPH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9,.\s+-]*$/ // path-data chars only — keeps arbitrary SVG/script out
+// scrub AI SVG before storing: drop script-capable nodes, event handlers, and external references.
+// (Rendered as a data-URI <image>, browsers already refuse scripts/external loads there — this is defense in depth.)
+function sanitizeSvg(raw) {
+  const s = String(raw || '').trim()
+  if (!/^<svg[\s>]/i.test(s) || s.length > 20000) return ''
+  let doc
+  try { doc = new DOMParser().parseFromString(s, 'image/svg+xml') } catch { return '' }
+  if (doc.querySelector('parsererror')) return ''
+  const root = doc.documentElement
+  if (root.nodeName.toLowerCase() !== 'svg') return ''
+  doc.querySelectorAll('script,foreignObject,iframe,embed,object,audio,video').forEach(n => n.remove())
+  for (const el of doc.querySelectorAll('*')) {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase(), v = a.value
+      if (n.startsWith('on')) el.removeAttribute(a.name)
+      else if ((n === 'href' || n === 'xlink:href') && !v.trim().startsWith('#')) el.removeAttribute(a.name)
+      else if (n === 'style' && /url\s*\(/i.test(v) && !/url\s*\(\s*['"]?#/i.test(v)) el.removeAttribute(a.name)
+    }
+  }
+  if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 96 60')
+  root.removeAttribute('width'); root.removeAttribute('height')
+  return new XMLSerializer().serializeToString(root)
+}
+function svgDataUri(svg) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) }
+function parseSvgVB(svg) {
+  const vb = /viewBox\s*=\s*"([-\d.\s]+)"/.exec(svg || '')?.[1].trim().split(/\s+/).map(Number)
+  return vb?.length === 4 && vb[2] > 0 && vb[3] > 0 ? { w: vb[2], h: vb[3] } : null
+}
 function normalizeAiComp(d) {
   const clamp = (n, lo, hi, def) => Number.isFinite(+n) ? Math.min(hi, Math.max(lo, +n)) : def
   const sides = { top: !!d.sides?.top, bottom: !!d.sides?.bottom, left: !!d.sides?.left, right: !!d.sides?.right }
@@ -371,6 +726,21 @@ function normalizeAiComp(d) {
   const behavior = ['static', 'onoff', 'openclose', 'level', 'meter'].includes(d.behavior) ? d.behavior : 'static'
   let vmin = clamp(d.vmin, -1e6, 1e6, 0), vmax = clamp(d.vmax, -1e6, 1e6, 100)
   if (vmax <= vmin) { vmin = 0; vmax = 100 }
+  const svg = sanitizeSvg(d.svg)
+  const svgVB = parseSvgVB(svg)
+  // liquid interior for level parts, stored as 0..1 fractions of the drawing (viewBox units → fractions)
+  let levelZone = null
+  if (svg && behavior === 'level') {
+    const z = d.levelZone || {}
+    if (svgVB && [z.x, z.y, z.w, z.h].every(Number.isFinite) && z.w > 0 && z.h > 0) {
+      levelZone = {
+        x: clamp(z.x / svgVB.w, 0, 0.95, 0.2),
+        y: clamp(z.y / svgVB.h, 0, 0.95, 0.15),
+        w: clamp(z.w / svgVB.w, 0.05, 1, 0.6),
+        h: clamp(z.h / svgVB.h, 0.05, 1, 0.7),
+      }
+    } else levelZone = { x: 0.2, y: 0.15, w: 0.6, h: 0.7 }
+  }
   return {
     label: String(d.label || 'AI Part').slice(0, 24),
     shape: ['box', 'circle', 'diamond', 'triangle', 'cylinder'].includes(d.shape) ? d.shape : 'box',
@@ -379,6 +749,7 @@ function normalizeAiComp(d) {
     border: HEX_RE.test(d.border) ? d.border : '#6366f1',
     w: clamp(d.w, 40, 260, 96), h: clamp(d.h, 30, 240, 60),
     behavior, vmin, vmax, unit: String(d.unit || '').slice(0, 8), sides,
+    svg, svgVB, levelZone,
     glyph: GLYPH_RE.test(d.glyph || '') ? String(d.glyph || '').slice(0, 1200) : '',
   }
 }
@@ -394,7 +765,7 @@ async function generateAiComp() {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: AI_MODEL,
-        max_tokens: 2048,
+        max_tokens: 16000, // reasoning models spend thousands of tokens thinking before the JSON appears
         messages: [
           { role: 'system', content: AI_COMP_SYSTEM },
           { role: 'user', content: prompt },
@@ -408,11 +779,16 @@ async function generateAiComp() {
       throw err
     }
     const data = await r.json()
-    let text = (data?.choices?.[0]?.message?.content || '').trim()
-    // tolerate models that wrap JSON in ``` fences or add prose around it
-    const a = text.indexOf('{'), b = text.lastIndexOf('}')
-    if (a === -1 || b <= a) throw new Error('Model returned no JSON — retry or set a stronger model via VITE_OPENROUTER_MODEL.')
-    aiComp.result = normalizeAiComp(JSON.parse(text.slice(a, b + 1)))
+    const choice = data?.choices?.[0] || {}
+    const msg = choice.message || {}
+    // reasoning models may leave content empty and put text in message.reasoning; JSON can sit in either
+    const parsed = extractJson(msg.content) || extractJson(msg.reasoning)
+    if (!parsed) {
+      throw new Error(choice.finish_reason === 'length'
+        ? 'Model ran out of tokens while thinking — Regenerate, or switch to a stronger model via VITE_OPENROUTER_MODEL.'
+        : `Model "${AI_MODEL}" returned no valid JSON — Regenerate, or set a stronger model via VITE_OPENROUTER_MODEL.`)
+    }
+    aiComp.result = normalizeAiComp(parsed)
   } catch (err) {
     aiComp.result = null
     aiComp.error = err?.status === 401 ? 'API key rejected (401). Check VITE_OPENROUTER_API_KEY.'
@@ -438,15 +814,65 @@ function aiGlyphTransform(def) { return glyphTransform(def.w, def.h) }
 const sel = reactive({
   id: null, type: null, name: '', hasName: false, hasRange: false,
   isPump: false, isValve: false, isControl: false,
-  simMin: 0, simMax: 8, on: false, open: false, pct: 100,
+  simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, on: false, open: false, pct: 100,
   targets: [], targetOptions: [],
   showSlider: true, showOpen: true, showClose: true,
   info: null, connections: [], angle: 0, tag: '',
   x: 0, y: 0, w: 0, h: 0, isCustom: false, locked: false,
   hasStyle: false, fillC: '#ffffff', borderC: '#000000', note: '', devtag: '',
+  isWell: false, produced: false, isDot: false, dotTarget: '', roundDot: false, dotOptions: [],
 })
 const tagList = TAGS
 function applyTag() { const m = selModel(); if (m) m.set('tag', sel.tag || undefined) }
+
+// --- per-element cursor resize (bottom-right drag handle on the selected element) ---
+// Fixed-art shapes (SCALE_BASE) scale uniformly via their 'sc' group; calc-drawn shapes
+// (Custom/AI, Note, Zone, Chart, Quality box types excluded) resize freely.
+const ResizeTool = joint.elementTools.Control.extend({
+  children: [{
+    tagName: 'rect', selector: 'handle',
+    attributes: { width: 11, height: 11, x: -5.5, y: -5.5, rx: 2, fill: '#6366f1', stroke: '#ffffff', 'stroke-width': 1.5, cursor: 'nwse-resize' },
+  }],
+  getPosition(view) { const s = view.model.size(); return { x: s.width, y: s.height } },
+  setPosition(view, coordinates) { resizeElTo(view.model, coordinates.x, coordinates.y) },
+})
+function resizeElTo(m, w, h) {
+  const t = m.get('type')
+  if (t === 's.Control') return // invisible anchor — its HTML overlay has no meaningful size
+  const old = m.size()
+  const base = SCALE_BASE[t]
+  let nw, nh
+  if (base) {
+    // uniform scale for fixed-art shapes
+    const s = Math.max(0.4, Math.min(4, Math.max(w / base.w, h / base.h)))
+    nw = base.w * s; nh = base.h * s
+    m.set('scale', s)
+    m.resize(nw, nh)
+    applyScale(m)
+  } else {
+    nw = Math.max(30, w); nh = Math.max(24, h)
+    m.resize(nw, nh)
+    if (t === 's.Custom') renderCustom(m)
+  }
+  // keep absolute-positioned ports proportionally attached
+  const fx = nw / old.width, fy = nh / old.height
+  if (fx !== 1 || fy !== 1) {
+    m.getPorts().forEach(p => {
+      const a = p.args || {}
+      if (typeof a.x === 'number') m.portProp(p.id, 'args/x', a.x * fx)
+      if (typeof a.y === 'number') m.portProp(p.id, 'args/y', a.y * fy)
+    })
+  }
+  if (sel.id === m.id) { sel.w = Math.round(nw); sel.h = Math.round(nh) }
+}
+let resizeToolView = null
+function syncResizeTool(model) {
+  if (resizeToolView) { try { resizeToolView.removeTools() } catch { /* view may be gone */ } resizeToolView = null }
+  if (!model || mode.value !== 'edit' || model.get('type') === 's.Control' || model.get('locked')) return
+  const v = model.findView(paper); if (!v) return
+  v.addTools(new joint.dia.ToolsView({ tools: [new ResizeTool()] }))
+  resizeToolView = v
+}
 
 // --- geometry / z-order / lock ---
 function applyPos() { const m = selModel(); if (!m) return; const x = Number(sel.x), y = Number(sel.y); if (Number.isNaN(x) || Number.isNaN(y)) return; m.position(x, y) }
@@ -490,11 +916,20 @@ function liveFields(m) {
   else if (t === 's.Flow') { add('Flow', (m.get('flow') ?? 0) + ' m³/h'); add('Total', Math.round(m.get('total') || 0) + ' m³') }
   else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).filter(id => graph.getCell(id)).length) }
   else if (t === 's.Quality') { add('pH', Number(m.get('ph') ?? 0).toFixed(2)); add('Turb', Number(m.get('turb') ?? 0).toFixed(2) + ' NTU'); add('Cl', Number(m.get('cl') ?? 0).toFixed(2)); add('DO', Number(m.get('do') ?? 0).toFixed(1)) }
+  else if (t === 's.Well') { add('Rate', Math.round(m.get('rate') ?? 0) + ' m³/h'); add('Water', m.get('produced') ? 'produced' : 'injection') }
+  else if (t === 's.Sum') { add('Total', Math.round(m.get('total') ?? 0) + ' m³/h'); add('Produced', Math.round(m.get('prod') ?? 0) + ' m³/h') }
+  else if (t === 's.Dot') { const tgt = m.get('watch') && graph.getCell(m.get('watch')); add('Watching', tgt ? nameOf(tgt) : '—'); add('State', tgt ? elemValue(tgt) : 'unbound') }
   else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.max(0, Math.min(100, Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100))) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
   return F
 }
 // pipe styling — separate selection for links (FlowPipe)
 const linkSel = reactive({ id: null, color: '#16a34a', width: 7 })
+const PIPE_PRESETS = [
+  { label: 'Default', color: '#c5cdd6' }, { label: 'Steam', color: '#ef4444' },
+  { label: 'Nitrogen', color: '#8b93f5' }, { label: 'Cooling water', color: '#22c55e' },
+  { label: 'Accent', color: '#f59e0b' },
+]
+function applyPipePreset(hex) { linkSel.color = hex; applyPipe() }
 function selectLink(m) {
   if (!m) { linkSel.id = null; return }
   selectEl(null)
@@ -509,7 +944,7 @@ function applyPipe() {
   m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
 }
 function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument' }
+const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument', 's.Well': 'Injection Well', 's.Sum': 'Injection Summary', 's.Dot': 'Status Dot' }
 function elemValue(e) {
   switch (e.get('type')) {
     case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
@@ -520,6 +955,8 @@ function elemValue(e) {
     case 's.Quality': return 'pH ' + Number(e.get('ph') ?? 7.2).toFixed(2)
     case 's.Flow': return (e.get('flow') ?? 0) + ' m³/h'
     case 's.Tap': return Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
+    case 's.Well': return Math.round(e.get('rate') ?? 0) + ' m³/h'
+    case 's.Sum': return Math.round(e.get('total') ?? 0) + ' m³/h total'
     default: return '—'
   }
 }
@@ -545,20 +982,33 @@ function updateSelInfo() {
 function selModel() { return sel.id ? graph.getCell(sel.id) : null }
 function selectEl(model) {
   linkSel.id = null // element (or blank) selection clears any pipe selection
+  syncResizeTool(model)
   if (!model) { sel.id = null; sel.type = null; sel.info = null; sel.connections = []; return }
   const t = model.get('type')
   sel.id = model.id; sel.type = t
-  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap' && t !== 's.Flow'
+  sel.hasName = t !== 's.PG' && t !== 's.Quality' && t !== 's.Tap' && t !== 's.Flow' && t !== 's.Sum' && t !== 's.Dot'
   sel.name = sel.hasName ? (model.attr('name/text') || '') : ''
-  sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG')
+  sel.hasRange = (t === 's.Cyl' || t === 's.Hopper' || t === 's.PG' || t === 's.Well')
   sel.isPump = t === 's.Pump'; sel.isValve = t === 's.Valve'; sel.isControl = t === 's.Control'
   sel.simMin = model.get('simMin') ?? (t === 's.PG' ? 0 : 20)
   sel.simMax = model.get('simMax') ?? (t === 's.PG' ? 8 : 70)
+  sel.bandYellow = model.get('bandYellow') ?? 60
+  sel.bandRed = model.get('bandRed') ?? 85
   sel.on = !!model.get('on'); sel.open = !!model.get('open'); sel.pct = model.get('pct') ?? 100
   sel.angle = typeof model.angle === 'function' ? Math.round(model.angle()) : 0
   sel.tag = model.get('tag') || ''
   const p = model.position(), sz = model.size()
   sel.x = Math.round(p.x); sel.y = Math.round(p.y); sel.w = sz.width; sel.h = sz.height
+  sel.isWell = t === 's.Well'; sel.produced = !!model.get('produced')
+  sel.isDot = t === 's.Dot'; sel.roundDot = !!model.get('round')
+  sel.dotTarget = model.get('watch') ? String(model.get('watch')) : ''
+  // a dot can only watch something with an open/closed (or on/off) state
+  sel.dotOptions = sel.isDot
+    ? graph.getElements()
+      .filter(e => e.get('type') === 's.Pump' || e.get('type') === 's.Valve' ||
+        (e.get('type') === 's.Custom' && (e.get('behavior') === 'onoff' || e.get('behavior') === 'openclose')))
+      .map(e => ({ id: String(e.id), name: e.attr('name/text') || TYPE_LABEL[e.get('type')] || e.get('type') }))
+    : []
   sel.isCustom = t === 's.Custom'; sel.locked = !!model.get('locked')
   sel.hasStyle = t === 's.Custom' || !!STYLE_SEL[t]
   if (t === 's.Custom') { sel.fillC = model.get('fillColor') || '#e0e7ff'; sel.borderC = model.get('borderColor') || '#6366f1' }
@@ -590,6 +1040,31 @@ function applyRange() {
   if (!Number.isNaN(lo)) m.set('simMin', lo)
   if (!Number.isNaN(hi)) m.set('simMax', hi)
   if (m.get('type') === 's.Cyl') setTankMarks(m) // move the range marker lines live
+  else if (m.get('type') === 's.PG') layoutGaugeBands(m) // range change also redraws tick labels
+}
+function applyBands() {
+  const m = selModel(); if (!m || m.get('type') !== 's.PG') return
+  const y = Number(sel.bandYellow), r = Number(sel.bandRed)
+  if (!Number.isNaN(y)) m.set('bandYellow', y)
+  if (!Number.isNaN(r)) m.set('bandRed', r)
+  layoutGaugeBands(m)
+}
+// injection well: which stream it takes — flips the summary row this well counts toward
+function applyProduced() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Well') return
+  m.set('produced', !!sel.produced)
+}
+// status dot: which pump/valve it watches, and square vs round chip
+function applyDotTarget() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Dot') return
+  m.set('watch', sel.dotTarget || null)
+  setDotVisual(m, graph)
+  updateSelInfo()
+}
+function applyDotRound() {
+  const m = selModel(); if (!m || m.get('type') !== 's.Dot') return
+  m.set('round', !!sel.roundDot)
+  setDotVisual(m, graph)
 }
 function togglePumpInit() { const m = selModel(); if (m) { m.set('on', sel.on) } }
 function toggleValveInit() { const m = selModel(); if (m) { m.set('open', sel.open) } }
@@ -771,8 +1246,9 @@ function computeAlarms() {
       const lvl = Math.round(e.get('level') ?? 0), lo = e.get('simMin') ?? 20
       if (lvl < lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
     } else if (t === 's.PG') {
-      const v = e.get('value') ?? 0, hi = e.get('simMax') ?? 8
-      if (v >= hi * 0.95) msg = `HIGH PRESSURE ${v.toFixed(1)}`
+      const v = e.get('value') ?? 0, lo = e.get('simMin') ?? 0, hi = e.get('simMax') ?? 8
+      const redAt = lo + (hi - lo) * ((e.get('bandRed') ?? 85) / 100)
+      if (v >= redAt) msg = `HIGH PRESSURE ${v.toFixed(1)}`
     }
     if (msg) { const p = e.position(); list.push({ id: e.id, name: nameOf(e), msg }); ui.push({ id: e.id, x: p.x, y: p.y }) }
   })
@@ -781,12 +1257,30 @@ function computeAlarms() {
 
 // --- dark theme ---
 const dark = ref(false)
-watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0f172a' : '#ffffff' }) })
+watch(dark, d => { if (paper) paper.drawBackground({ color: d ? '#0a1420' : '#ffffff' }) })
 
-// --- tablet/mobile drawers for palette + inspector (desktop ignores these) ---
-const paletteOpen = ref(false)
+// --- tablet/mobile drawer for inspector (desktop ignores this) ---
 const inspectorOpen = ref(false)
-function closeDrawers() { paletteOpen.value = false; inspectorOpen.value = false }
+function closeDrawers() { inspectorOpen.value = false }
+
+// --- app-shell chrome: left sidebar + top app bar (search/menus) ---
+const railCollapsed = ref(false)
+const addMenuOpen = ref(false)
+const overflowOpen = ref(false)
+const userMenuOpen = ref(false)
+const paletteFilter = ref('')
+// sidebar component menu: accordion — one section open at a time
+const openSection = ref('components')
+function toggleSection(name) { openSection.value = openSection.value === name ? null : name }
+function closeChromeMenus() { addMenuOpen.value = false; overflowOpen.value = false; userMenuOpen.value = false }
+function toggleAddMenu() { addMenuOpen.value = !addMenuOpen.value; overflowOpen.value = false; userMenuOpen.value = false }
+function toggleOverflowMenu() { overflowOpen.value = !overflowOpen.value; addMenuOpen.value = false; userMenuOpen.value = false }
+function toggleUserMenu() { userMenuOpen.value = !userMenuOpen.value; addMenuOpen.value = false; overflowOpen.value = false }
+function filteredByName(list, nameKey) {
+  const q = paletteFilter.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(x => String(x[nameKey] ?? '').toLowerCase().includes(q))
+}
 
 // --- export the diagram as a PNG image ---
 function exportPng() {
@@ -829,8 +1323,8 @@ onMounted(() => {
   graph = new joint.dia.Graph({}, { cellNamespace: joint.shapes })
   paper = new joint.dia.Paper({
     el: host.value, model: graph, width: STAGE_W, height: STAGE_H,
-    background: { color: '#ffffff' }, cellViewNamespace: joint.shapes, async: true,
-    gridSize: 10, drawGrid: { name: 'dot', args: { color: '#e2e8f0' } },
+    background: { color: '#0a1420' }, cellViewNamespace: joint.shapes, async: true,
+    gridSize: 10, drawGrid: { name: 'dot', args: { color: '#2a3d52' } },
     defaultConnectionPoint: { name: 'anchor' },
     // drawing from a pressure gauge makes a dashed instrument leader; otherwise a flow pipe
     defaultLink: (cellView) => (cellView && cellView.model && cellView.model.get('type') === 's.PG' ? new Leader() : new FlowPipe()),
@@ -894,9 +1388,11 @@ function stopSim() {
     const t = e.get('type')
     if (t === 's.Flow') { e.set('flow', 0); e.attr('rotor/class', ''); e.attr('val/text', '0 m³/h') }
     else if (t === 's.Tap') { e.set('pressure', 0); e.attr('pVal/text', '0.0'); e.attr('val/text', '0.0 bar') }
+    else if (t === 's.Well') { e.set('rate', 0); e.attr('rate/text', '0 m³/h') }
+    else if (t === 's.Sum') { e.set('total', 0); e.set('prod', 0); e.attr('v1/text', '0'); e.attr('v2/text', '0') }
   })
 }
-watch(mode, m => { linkSel.id = null; if (m === 'run') startSim(); else stopSim() })
+watch(mode, m => { linkSel.id = null; syncResizeTool(m === 'edit' ? selModel() : null); if (m === 'run') startSim(); else stopSim() })
 
 onUnmounted(() => {
   stopSim()
@@ -913,62 +1409,128 @@ onUnmounted(() => {
 
 <template>
   <div class="builder" :class="{ dark }">
-    <div class="toolbar">
-      <strong>SCADA Builder</strong>
-      <div class="tgroup">
-        <button title="New" @click="newLayout"><FilePlus2 :size="15" /></button>
-        <button title="Save" @click="saveLayout"><Save :size="15" /></button>
-        <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)">
-          <option value="">Load…</option>
-          <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
-        </select>
-        <button :disabled="!currentName" title="Delete layout" @click="deleteLayout"><Trash2 :size="15" /></button>
-      </div>
-      <div class="tgroup">
-        <button :disabled="!canUndo" title="Undo (⌘/Ctrl+Z)" @click="undo"><Undo2 :size="15" /></button>
-        <button :disabled="!canRedo" title="Redo (⌘/Ctrl+Shift+Z)" @click="redo"><Redo2 :size="15" /></button>
-        <button :disabled="!sel.id || mode === 'run'" title="Duplicate (⌘/Ctrl+D)" @click="duplicateSel"><Copy :size="15" /></button>
-      </div>
-      <div class="tgroup">
-        <button title="Export JSON" @click="exportJson"><Download :size="15" /></button>
-        <button title="Import JSON" @click="pickImport"><Upload :size="15" /></button>
-        <button title="Export PNG" @click="exportPng"><ImageIcon :size="15" /></button>
-        <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''">
-          <option value="">Template…</option>
-          <option value="water">Water Treatment</option>
-          <option value="dual">Dual Pump</option>
-        </select>
-        <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
-      </div>
-      <button class="ai" :disabled="mode === 'run'" @click="openAiComp"><Sparkles :size="15" /> AI Component</button>
-      <span class="sp"></span>
-      <button class="drawer-toggle" :class="{ on: paletteOpen }" title="Components" @click="paletteOpen = !paletteOpen; inspectorOpen = false"><PanelLeft :size="15" /></button>
-      <button class="drawer-toggle" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen; paletteOpen = false"><PanelRight :size="15" /></button>
-      <button class="iconbtn" :class="{ on: dark }" title="Dark mode" @click="dark = !dark"><Moon :size="15" /></button>
-      <div class="modeswitch">
-        <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
-        <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
-      </div>
-    </div>
-    <div class="drawer-backdrop" :class="{ show: paletteOpen || inspectorOpen }" @click="closeDrawers"></div>
-    <div class="cols">
-      <aside class="palette" :class="{ open: paletteOpen }">
-        <div class="ptitle">Components</div>
-        <button v-for="p in palette" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
-          <component :is="p.icon || PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
+    <nav class="rail" :class="{ collapsed: railCollapsed }">
+      <div class="rail-brand">
+        <img class="rail-logo" src="https://metrion.blr1.cdn.digitaloceanspaces.com/metrion-favicon.svg" alt="Metrion" />
+        <span class="rail-brand-name">Metrion</span>
+        <button class="rail-collapse" :title="railCollapsed ? 'Expand' : 'Collapse'" @click="railCollapsed = !railCollapsed">
+          <component :is="railCollapsed ? ChevronRight : ChevronLeft" :size="14" />
         </button>
-        <div class="ptitle" style="margin-top:14px">My Components</div>
-        <div v-for="c in customComps" :key="c.id" class="customrow">
-          <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
-          <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
+      </div>
+      <label class="searchbox rail-search">
+        <Search :size="15" />
+        <input type="text" v-model="paletteFilter" placeholder="Search components…">
+      </label>
+      <div class="rail-nav rail-scroll">
+        <button class="rail-icon" :disabled="mode === 'run'" title="AI Component" @click="openAiComp">
+          <Sparkles :size="18" /> <span class="rail-icon-label">AI Component</span>
+        </button>
+
+        <div class="accordion">
+          <button class="accordion-head" :class="{ open: openSection === 'components' }" @click="toggleSection('components')">
+            <ShoppingBasket :size="16" /> <span class="accordion-label">Components</span>
+            <ChevronDown :size="14" class="accordion-chevron" />
+          </button>
+          <div v-show="openSection === 'components'" class="accordion-body">
+            <button v-for="p in filteredByName(palette, 'label')" :key="p.key || p.type" :disabled="mode === 'run'" @click="addComponent(p)">
+              <component :is="p.icon || PALETTE_ICON[p.type]" :size="16" class="ico" /> {{ p.label }}
+            </button>
+          </div>
         </div>
-        <div class="liblinks">
-          <a @click="exportCompLib"><Download :size="13" /> Export</a>
-          <a @click="pickCompLib"><Upload :size="13" /> Import</a>
-          <input ref="libInput" type="file" accept="application/json,.json" style="display:none" @change="importCompLib">
+
+        <div class="accordion">
+          <button class="accordion-head" :class="{ open: openSection === 'pid' }" @click="toggleSection('pid')">
+            <Shapes :size="16" /> <span class="accordion-label">P&amp;ID Symbols</span>
+            <ChevronDown :size="14" class="accordion-chevron" />
+          </button>
+          <div v-show="openSection === 'pid'" class="accordion-body">
+            <button v-for="pd in filteredByName(PID_DEFS, 'label')" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
+              <component :is="PID_PALETTE_ICON[pd.key] || Shapes" :size="16" class="ico" /> {{ pd.label }}
+            </button>
+          </div>
         </div>
-        <div class="hint">{{ mode === 'edit' ? 'Drag a port to draw a pipe. Hover a pipe to remove it.' : 'Click pumps/valves to toggle.' }}</div>
-      </aside>
+
+        <div class="accordion">
+          <button class="accordion-head" :class="{ open: openSection === 'custom' }" @click="toggleSection('custom')">
+            <Tag :size="16" /> <span class="accordion-label">My Components</span>
+            <ChevronDown :size="14" class="accordion-chevron" />
+          </button>
+          <div v-show="openSection === 'custom'" class="accordion-body">
+            <div v-for="c in filteredByName(customComps, 'label')" :key="c.id" class="customrow">
+              <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
+              <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
+            </div>
+            <div class="liblinks">
+              <a @click="exportCompLib"><Download :size="13" /> Export</a>
+              <a @click="pickCompLib"><Upload :size="13" /> Import</a>
+              <input ref="libInput" type="file" accept="application/json,.json" style="display:none" @change="importCompLib">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="user" class="menu-wrap rail-user">
+        <button class="rail-avatar" title="Account" @click="toggleUserMenu">
+          {{ ((user.profile && user.profile.email) || 'U')[0].toUpperCase() }}
+        </button>
+        <div v-if="userMenuOpen" class="dropdown usermenu">
+          <div class="usermenu-email">{{ user.profile && user.profile.email }}</div>
+          <button @click="userMenuOpen = false; logout()"><LogOut :size="14" /> Logout</button>
+        </div>
+      </div>
+      <div v-if="version" class="rail-version">{{ version }}</div>
+    </nav>
+    <div class="shell">
+      <header class="appbar">
+        <div class="pagehead">
+          <button class="hb" title="Toggle menu" @click="railCollapsed = !railCollapsed"><Menu :size="18" /></button>
+          <div class="modeswitch">
+            <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
+            <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
+          </div>
+          <button class="pill iconOnly" :class="{ on: mode === 'run' }" :title="mode === 'run' ? 'Locked (Run mode) — click to unlock' : 'Unlocked (Edit mode) — click to lock'" @click="mode = mode === 'edit' ? 'run' : 'edit'">
+            <component :is="mode === 'run' ? LockIcon : Unlock" :size="16" />
+          </button>
+          <span v-if="currentName" class="currentname">{{ currentName }}</span>
+          <span class="sp"></span>
+          <div v-if="today || clock" class="pagehead-time">{{ today }}<template v-if="today && clock"> · </template>{{ clock }}</div>
+          <div class="menu-wrap">
+            <button class="pill" @click="toggleAddMenu"><Plus :size="14" /> Add</button>
+            <div v-if="addMenuOpen" class="dropdown" @click="addMenuOpen = false">
+              <button @click="newLayout"><FilePlus2 :size="14" /> New</button>
+              <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)" @click.stop>
+                <option value="">Load…</option>
+                <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
+              </select>
+              <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''" @click.stop>
+                <option value="">Template…</option>
+                <option value="water">Water Treatment</option>
+                <option value="dual">Dual Pump</option>
+                <option value="chemical">Chemical Distillation</option>
+                <option value="gas">Gas Treatment</option>
+                <option value="reservoir">Reservoir Dashboard</option>
+              </select>
+            </div>
+          </div>
+          <div class="menu-wrap">
+            <button class="pill iconOnly" title="More" @click="toggleOverflowMenu"><MoreHorizontal :size="16" /></button>
+            <div v-if="overflowOpen" class="dropdown" @click="overflowOpen = false">
+              <button @click="saveLayout"><Save :size="14" /> Save</button>
+              <button :disabled="!currentName" @click="deleteLayout"><Trash2 :size="14" /> Delete layout</button>
+              <button :disabled="!canUndo" @click="undo"><Undo2 :size="14" /> Undo</button>
+              <button :disabled="!canRedo" @click="redo"><Redo2 :size="14" /> Redo</button>
+              <button :disabled="!sel.id || mode === 'run'" @click="duplicateSel"><Copy :size="14" /> Duplicate</button>
+              <button @click="exportJson"><Download :size="14" /> Export JSON</button>
+              <button @click="pickImport"><Upload :size="14" /> Import JSON</button>
+              <button @click="exportPng"><ImageIcon :size="14" /> Export PNG</button>
+              <button :class="{ on: dark }" @click="dark = !dark"><Moon :size="14" /> Dark mode</button>
+            </div>
+          </div>
+          <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
+          <button class="pill iconOnly" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="16" /></button>
+        </div>
+      </header>
+      <div class="drawer-backdrop" :class="{ show: inspectorOpen || !railCollapsed }" @click="closeDrawers(); closeChromeMenus(); railCollapsed = true"></div>
+      <div class="cols">
       <div ref="fitEl" class="fit">
         <div ref="host" class="paper"></div>
         <!-- alarm banner floats over the canvas so it never reflows/blinks the design -->
@@ -1005,6 +1567,10 @@ onUnmounted(() => {
         <div class="ptitle">Inspector</div>
         <div v-if="linkSel.id" class="fields">
           <div class="tlabel">Pipe</div>
+          <div class="pipe-swatches">
+            <button v-for="p in PIPE_PRESETS" :key="p.color" class="swatch" :class="{ on: linkSel.color === p.color }"
+                    :style="{ background: p.color }" :title="p.label" @click="applyPipePreset(p.color)"></button>
+          </div>
           <label>Color
             <input type="color" v-model="linkSel.color" @input="applyPipe">
           </label>
@@ -1034,13 +1600,21 @@ onUnmounted(() => {
             </div>
           </template>
           <template v-if="sel.hasRange">
-            <label>{{ sel.type === 's.PG' ? 'Min' : 'Low mark %' }}
+            <label>{{ sel.type === 's.PG' ? 'Min' : sel.type === 's.Well' ? 'Min m³/h' : 'Low mark %' }}
               <input type="number" v-model="sel.simMin" @input="applyRange">
             </label>
-            <label>{{ sel.type === 's.PG' ? 'Max' : 'High mark %' }}
+            <label>{{ sel.type === 's.PG' ? 'Max' : sel.type === 's.Well' ? 'Max m³/h' : 'High mark %' }}
               <input type="number" v-model="sel.simMax" @input="applyRange">
             </label>
-            <label>Bind live tag
+            <template v-if="sel.type === 's.PG'">
+              <label>Yellow at %
+                <input type="number" v-model="sel.bandYellow" @input="applyBands">
+              </label>
+              <label>Red at %
+                <input type="number" v-model="sel.bandRed" @input="applyBands">
+              </label>
+            </template>
+            <label v-if="sel.type !== 's.Well'">Bind live tag
               <select v-model="sel.tag" @change="applyTag">
                 <option value="">— simulated —</option>
                 <option v-for="t in tagList" :key="t.path" :value="t.path">{{ t.label }}</option>
@@ -1053,6 +1627,20 @@ onUnmounted(() => {
           <label v-if="sel.isValve" class="chk">
             <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> Open
           </label>
+          <label v-if="sel.isWell" class="chk">
+            <input type="checkbox" v-model="sel.produced" @change="applyProduced"> Takes produced water
+          </label>
+          <template v-if="sel.isDot">
+            <label>Watches
+              <select v-model="sel.dotTarget" @change="applyDotTarget">
+                <option value="">— unbound —</option>
+                <option v-for="o in sel.dotOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
+              </select>
+            </label>
+            <label class="chk">
+              <input type="checkbox" v-model="sel.roundDot" @change="applyDotRound"> Round dot
+            </label>
+          </template>
           <template v-if="sel.isControl">
             <label>Open %
               <input type="range" min="0" max="100" v-model.number="sel.pct" @input="applyPct">
@@ -1123,6 +1711,7 @@ onUnmounted(() => {
         </div>
       </aside>
     </div>
+    </div>
 
     <!-- fullscreen chart -->
     <div v-if="fsChart" class="fsmodal" @click.self="fsChart = null">
@@ -1136,39 +1725,57 @@ onUnmounted(() => {
     </div>
 
     <!-- new custom component -->
-    <!-- AI component generator -->
-    <div v-if="aiComp.open" class="fsmodal" @click.self="aiComp.open = false">
-      <div class="dlg">
-        <div class="fshead"><b><Sparkles :size="15" style="vertical-align:-2px" /> AI component</b><button @click="aiComp.open = false"><X :size="15" /></button></div>
-        <div class="dlgbody">
-          <textarea v-model="aiComp.prompt" rows="3" :disabled="aiComp.loading"
-                    placeholder="e.g. a chlorine dosing pump with on/off state, or a UV disinfection unit, or a pressure sensor reading 0–10 bar"
-                    @keydown.enter.exact.prevent="generateAiComp"></textarea>
-          <div class="hint">Describe any plant part. AI maps it to this builder's component JSON — shape, colors, ports, live behavior, symbol — and it lands in “My Components”.</div>
-          <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
-          <div v-if="aiComp.result" class="aiprev">
-            <svg class="aiprevsvg" :viewBox="'-2 -2 ' + (aiComp.result.w + 4) + ' ' + (aiComp.result.h + 4)">
-              <rect v-if="aiComp.result.shape === 'box'" :width="aiComp.result.w" :height="aiComp.result.h" rx="8" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <ellipse v-else-if="aiComp.result.shape === 'circle'" :cx="aiComp.result.w / 2" :cy="aiComp.result.h / 2" :rx="aiComp.result.w / 2" :ry="aiComp.result.h / 2" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <path v-else :d="customPath(aiComp.result.shape, aiComp.result.w, aiComp.result.h)" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
-              <path v-if="aiComp.result.glyph" :d="aiComp.result.glyph" fill="none" :stroke="aiComp.result.border" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :transform="aiGlyphTransform(aiComp.result)" />
-              <text v-else-if="aiComp.result.icon" :x="aiComp.result.w / 2" :y="aiComp.result.h / 2" text-anchor="middle" dominant-baseline="central" font-size="20">{{ aiComp.result.icon }}</text>
-            </svg>
+    <!-- AI component generator (right slide-in panel — canvas stays visible) -->
+    <aside v-if="aiComp.open" class="aipanel">
+      <div class="aihead">
+        <span class="aihead-ic"><Sparkles :size="16" /></span>
+        <div class="aihead-t"><b>AI Component</b><span>Describe a part — get a realistic live component</span></div>
+        <button class="aiclose" @click="aiComp.open = false"><X :size="15" /></button>
+      </div>
+      <div class="aipanelbody">
+        <div class="ailabel">Describe your component</div>
+        <textarea v-model="aiComp.prompt" rows="4" class="aita" :disabled="aiComp.loading"
+                  placeholder="e.g. a chlorine dosing pump with on/off state, or a pressure sensor reading 0–10 bar"
+                  @keydown.enter.exact.prevent="generateAiComp"></textarea>
+        <template v-if="!aiComp.result && !aiComp.loading">
+          <div class="ailabel">Try one of these</div>
+          <div class="aichips">
+            <button v-for="ex in AI_EXAMPLES" :key="ex" class="aichip" @click="aiComp.prompt = ex">{{ ex }}</button>
+          </div>
+        </template>
+        <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
+        <div v-if="aiComp.loading" class="aiload"><span class="aispin"></span> Generating component…</div>
+        <template v-if="aiComp.result">
+          <div class="ailabel">Preview</div>
+          <div class="aiprev">
+            <div class="aiprevstage">
+              <img v-if="aiComp.result.svg" class="aiprevsvg" :src="svgDataUri(aiComp.result.svg)" alt="">
+              <svg v-else class="aiprevsvg" :viewBox="'-2 -2 ' + (aiComp.result.w + 4) + ' ' + (aiComp.result.h + 4)">
+                <rect v-if="aiComp.result.shape === 'box'" :width="aiComp.result.w" :height="aiComp.result.h" rx="8" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <ellipse v-else-if="aiComp.result.shape === 'circle'" :cx="aiComp.result.w / 2" :cy="aiComp.result.h / 2" :rx="aiComp.result.w / 2" :ry="aiComp.result.h / 2" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <path v-else :d="customPath(aiComp.result.shape, aiComp.result.w, aiComp.result.h)" :fill="aiComp.result.color" :stroke="aiComp.result.border" stroke-width="1.5" />
+                <path v-if="aiComp.result.glyph" :d="aiComp.result.glyph" fill="none" :stroke="aiComp.result.border" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :transform="aiGlyphTransform(aiComp.result)" />
+                <text v-else-if="aiComp.result.icon" :x="aiComp.result.w / 2" :y="aiComp.result.h / 2" text-anchor="middle" dominant-baseline="central" font-size="20">{{ aiComp.result.icon }}</text>
+              </svg>
+            </div>
             <div class="aiprevmeta">
               <b>{{ aiComp.result.label }}</b>
-              <span>{{ aiComp.result.shape }} · {{ aiComp.result.behavior }}<template v-if="aiComp.result.behavior === 'meter'"> · {{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</template></span>
-              <span>ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
+              <div class="aitags">
+                <span class="aitag">{{ aiComp.result.behavior }}</span>
+                <span v-if="aiComp.result.behavior === 'meter'" class="aitag">{{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</span>
+                <span class="aitag">ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
+              </div>
             </div>
           </div>
-          <div class="frow">
-            <button class="primary" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
-              <Sparkles :size="14" style="vertical-align:-2px" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
-            </button>
-            <button v-if="aiComp.result" class="primary" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" style="vertical-align:-2px" /> Add to My Components</button>
-          </div>
+        </template>
+        <div class="aiactions">
+          <button class="aigen" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
+            <Sparkles :size="14" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
+          </button>
+          <button v-if="aiComp.result" class="aiadd" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" /> Add to My Components</button>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- in-app confirm / alert / prompt dialog -->
     <div v-if="dlg.open" class="fsmodal" @click.self="dlgCancel">
@@ -1193,57 +1800,125 @@ onUnmounted(() => {
 <style scoped>
 /* design tokens — single accent, flat/minimal surfaces (light + dark) */
 .builder {
-  --surface: #ffffff; --surface-2: #f8fafc; --surface-elevated: #ffffff; --bar: #f8fafc; --border: #cbd5e1;
-  --text: #0f172a; --muted: #64748b; --accent: #4f46e5; --accent-soft: rgba(79,70,229,.12);
-  --r-sm: 0; --r-md: 0; --r-lg: 0;
-  --shadow-modal: 0 8px 24px rgba(15,23,42,.25);
-  --shadow-float: 0 4px 12px rgba(15,23,42,.10);
-  width: 100%; height: 100%; display: flex; flex-direction: column; color: var(--text);
+  --surface: #ffffff; --surface-2: #f8fafc; --surface-elevated: #ffffff; --bar: #f8fafc; --border: #e2e8f0;
+  --text: #0f172a; --muted: #64748b; --accent: #0d9488; --accent-hover: #0f766e; --accent-soft: rgba(13,148,136,.12);
+  --accent-ring: rgba(13,148,136,.25); --accent-ring-soft: rgba(13,148,136,.15);
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --shadow-panel: 0 1px 2px rgba(15,23,42,.04), 0 6px 16px rgba(15,23,42,.05);
+  --shadow-modal: 0 20px 48px rgba(15,23,42,.22), 0 4px 12px rgba(15,23,42,.08);
+  --shadow-float: 0 10px 24px rgba(15,23,42,.10), 0 2px 6px rgba(15,23,42,.06);
+  width: 100%; height: 100%; display: flex; flex-direction: row; color: var(--text);
 }
 .builder.dark {
-  --surface: #111827; --surface-2: #0b1220; --surface-elevated: #1e293b; --bar: #0f172a; --border: #3b4b63; --text: #e5e7eb; --muted: #94a3b8;
-  --shadow-modal: 0 8px 28px rgba(0,0,0,.55);
-  --shadow-float: 0 4px 14px rgba(0,0,0,.4);
+  --surface: #111827; --surface-2: #0b1220; --surface-elevated: #1a2436; --bar: #0d1420; --border: #2c3a4f; --text: #e5e7eb; --muted: #8fa2b8;
+  --accent: #2dd4bf; --accent-hover: #5eead4; --accent-soft: rgba(45,212,191,.16);
+  --accent-ring: rgba(45,212,191,.3); --accent-ring-soft: rgba(45,212,191,.18);
+  --shadow-panel: 0 1px 2px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.28);
+  --shadow-modal: 0 24px 60px rgba(0,0,0,.6), 0 6px 16px rgba(0,0,0,.35);
+  --shadow-float: 0 12px 28px rgba(0,0,0,.45), 0 3px 8px rgba(0,0,0,.3);
 }
 /* flat reset: neutralize native UA borders on form controls; each control
    below adds back an explicit border where it wants one */
 .builder button, .builder input, .builder select, .builder textarea { border: none; }
+.builder select {
+  appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+/* left sidebar: logo on top, accordion component menu, account at bottom */
+.rail { flex: none; width: 240px; display: flex; flex-direction: column; padding: 16px 12px; background: var(--bar); border-right: 1px solid var(--border); transition: width .15s ease; }
+.rail.collapsed { width: 0; padding: 16px 0; border-right: none; overflow: hidden; }
+.rail-brand { flex: none; display: flex; align-items: center; gap: 10px; padding: 0 4px 16px; margin-bottom: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.rail-logo { width: 28px; height: 28px; flex: none; }
+.rail-brand-name { flex: 1; font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.01em; }
+.rail-collapse { flex: none; width: 26px; height: 26px; display: grid; place-items: center; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; }
+.rail-collapse:hover { background: var(--surface-2); color: var(--text); }
+.rail-search { flex: none; width: 100%; margin-bottom: 12px; }
+.rail-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 0 -4px; padding: 0 4px; }
+.rail-icon { width: 100%; flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 10px; background: transparent; border-radius: var(--r-md); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; margin-bottom: 4px; }
+.rail-icon:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.rail-icon:disabled { opacity: .4; cursor: not-allowed; }
+.rail-icon-label { overflow: hidden; text-overflow: ellipsis; }
+.accordion { flex: none; }
+.accordion-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 10px; background: transparent; border-radius: var(--r-md); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s ease; }
+.accordion-head:hover { background: var(--surface-2); }
+.accordion-head.open { background: var(--accent-soft); color: var(--accent); }
+.accordion-label { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.accordion-chevron { flex: none; transition: transform .15s ease; }
+.accordion-head.open .accordion-chevron { transform: rotate(180deg); }
+.accordion-body { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 8px 8px; }
+.accordion-body button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 9px; font-size: 12.5px; font-weight: 600; background: transparent; color: var(--muted); border-radius: var(--r-sm); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.accordion-body button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.accordion-body button:disabled { opacity: .45; cursor: not-allowed; }
+.accordion-body button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.rail-sp { flex: 1; }
+.rail-user { flex: none; margin-top: 10px; }
+.rail-user .dropdown { bottom: calc(100% + 8px); top: auto; left: 0; right: auto; min-width: 200px; }
+.rail-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; flex: none; }
+.usermenu-email { font-size: 11.5px; color: var(--muted); padding: 7px 9px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; word-break: break-all; }
+.usermenu button { color: #dc2626; }
+.usermenu button:hover { background: #fef2f2; color: #dc2626; }
+.builder.dark .usermenu button:hover { background: rgba(220,38,38,.15); }
+.rail-version { flex: none; margin-top: 10px; padding: 10px 4px 0; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* app shell: appbar (title/actions) + canvas columns */
+.shell { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.appbar { flex: none; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface-elevated); }
+.hb { width: 32px; height: 32px; display: grid; place-items: center; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; flex: none; }
+.hb:hover { background: var(--surface-2); color: var(--text); }
+.searchbox { display: flex; align-items: center; gap: 8px; width: 220px; max-width: 100%; padding: 7px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
+.searchbox input { flex: 1; min-width: 0; background: transparent; color: var(--text); font-size: 13px; }
+.searchbox input::placeholder { color: var(--muted); }
+.pagehead .sp { flex: 1; }
+.menu-wrap { position: relative; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 8px 12px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
+.pill:hover { background: var(--surface-2); }
+.pill.iconOnly { padding: 8px; }
+.pill.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dropdown { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 180px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-float); }
+.dropdown button, .dropdown select { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 9px; font-size: 12px; font-weight: 600; background: transparent; color: var(--muted); border-radius: var(--r-md); cursor: pointer; }
+.dropdown button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.dropdown button:disabled { opacity: .4; cursor: not-allowed; }
+.dropdown button.on { background: var(--accent); color: #fff; }
+.dropdown select { border: 1px solid var(--border); background-color: var(--surface); color: var(--text); padding-right: 28px; }
+.pagehead { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.currentname { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagehead-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--accent); white-space: nowrap; }
 .toolbar { display: flex; align-items: center; gap: 6px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: var(--text); }
 .toolbar > strong { font-weight: 700; letter-spacing: .01em; margin-right: 2px; }
 .toolbar .sp { flex: 1; }
 .tgroup { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--border); }
 .modeswitch { display: flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 2px; }
-.modeswitch button { border: none; background: transparent; }
-.toolbar .modeswitch button { background: transparent; }
-.modeswitch button.on { background: var(--surface); border-radius: var(--r-sm); }
-.toolbar button, .palette button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: var(--r-md); padding: 7px 10px; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.modeswitch button { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: var(--r-sm); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.modeswitch button:hover:not(.on) { color: var(--text); }
+.modeswitch button.on { background: var(--accent); color: #fff; }
+.toolbar button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: var(--r-md); padding: 7px 10px; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s ease, color .15s ease; }
 .toolbar button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .toolbar button:disabled { opacity: .4; cursor: not-allowed; }
-.toolbar button:focus-visible, .palette button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .toolbar button.on { background: var(--accent); color: #fff; }
 .toolbar .loadsel { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .builder.dark .toolbar { color: var(--text); }
-.builder.dark .toolbar button.on { background: #2563eb; color: #fff; }
-.cols { display: flex; gap: 8px; flex: 1; min-height: 0; }
-.palette, .inspector { width: 184px; flex: none; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px; overflow: auto; }
-.inspector { width: 228px; }
-.palette button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 4px; text-align: left; padding: 8px 10px; }
-.palette button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
-.palette button:disabled { opacity: .45; cursor: not-allowed; }
-.ptitle { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
-.hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.builder.dark .toolbar button.on { background: var(--accent); color: #fff; }
+.cols { display: flex; gap: 14px; flex: 1; min-height: 0; padding: 14px 20px 20px; }
+.inspector { width: 240px; flex: none; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px; overflow: auto; box-shadow: var(--shadow-panel); }
 .empty { font-size: 12px; color: var(--muted); }
 .ico { flex: none; color: var(--accent); }
 .fit { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
 .paper { position: absolute; top: 0; left: 0; }
 /* the control panel IS the control; gaps are click-through, interactive parts + header capture pointer */
 .cov { position: absolute; width: 124px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0 8px 6px; text-align: center; pointer-events: none; z-index: 5; box-shadow: var(--shadow-float); }
-.cov.sel { border-color: #2563eb; box-shadow: var(--shadow-float), 0 0 0 2px rgba(37,99,235,.25); }
+.cov.sel { border-color: var(--accent); box-shadow: var(--shadow-float), 0 0 0 2px var(--accent-ring); }
 .cov input, .cov button, .cov .covhdr { pointer-events: auto; }
 .cov .covhdr { font-size: 12px; font-weight: 700; color: var(--text); cursor: move; user-select: none; padding: 5px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .chartov { position: absolute; box-sizing: border-box; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-md); display: flex; flex-direction: column; overflow: hidden; z-index: 4; pointer-events: none; box-shadow: var(--shadow-float); }
 .chartov .chdr, .chartov .chbody { pointer-events: auto; }
-.chartov.sel { border-color: #2563eb; box-shadow: var(--shadow-float), 0 0 0 2px rgba(37,99,235,.25); }
+.chartov.sel { border-color: var(--accent); box-shadow: var(--shadow-float), 0 0 0 2px var(--accent-ring); }
 .chdr { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
 .chname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--text); }
 .fsbtn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12px; line-height: 1; padding: 2px 6px; cursor: pointer; color: var(--muted); }
@@ -1274,8 +1949,8 @@ onUnmounted(() => {
 .fshead button { width: 28px; height: 28px; display: grid; place-items: center; border: none; background: var(--surface-2); border-radius: 0; font-size: 13px; cursor: pointer; color: var(--muted); transition: background .15s ease; }
 .fshead button:hover { background: var(--surface-2); filter: brightness(.95); }
 .fsbody { flex: 1; min-height: 0; padding: 16px; }
-.cov input[type=range] { width: 100%; accent-color: #2563eb; }
-.cov .covval { font-size: 11px; color: #2563eb; font-weight: 600; margin: 2px 0 4px; }
+.cov input[type=range] { width: 100%; accent-color: var(--accent); }
+.cov .covval { font-size: 11px; color: var(--accent); font-weight: 600; margin: 2px 0 4px; }
 .cov .covbtns { display: flex; gap: 4px; }
 .cov .covbtns button { flex: 1; font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px 0; cursor: pointer; background: var(--surface-2); color: var(--muted); }
 .cov .covbtns .open { background: #16a34a; color: #fff; border-color: #16a34a; }
@@ -1283,37 +1958,41 @@ onUnmounted(() => {
 .fields { display: flex; flex-direction: column; gap: 12px; }
 .fields label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
 .fields label.chk { flex-direction: row; align-items: center; gap: 6px; }
-.fields input[type=text], .fields input[type=number], .fields select { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 7px; font-size: 12px; background: var(--surface); color: var(--text); transition: border-color .15s ease, box-shadow .15s ease; }
-.fields input[type=text]:focus, .fields input[type=number]:focus, .fields select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.fields input[type=text], .fields input[type=number], .fields select { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 7px; font-size: 12px; background-color: var(--surface); color: var(--text); transition: border-color .15s ease, box-shadow .15s ease; }
+.fields select { padding-right: 28px; }
+.fields input[type=text]:focus, .fields input[type=number]:focus, .fields select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring-soft); }
 .fields input[type=color] { width: 100%; height: 28px; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px; cursor: pointer; }
 .fields textarea { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 7px; font-size: 12px; font-family: inherit; resize: vertical; background: var(--surface); color: var(--text); transition: border-color .15s ease, box-shadow .15s ease; }
-.fields textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.fields textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring-soft); }
 .fields .pctstep label.chk { font-weight: 500; font-size: 11px; }
-.fields input[type=range] { accent-color: #2563eb; }
-.pctval { font-size: 11px; color: #2563eb; }
+.fields input[type=range] { accent-color: var(--accent); }
+.pctval { font-size: 11px; color: var(--accent); }
 .del { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; border-radius: var(--r-sm); padding: 5px; font-weight: 600; cursor: pointer; font-size: 12px; }
 .loadsel { font-size: 12px; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 8px; background: var(--surface); color: var(--text); }
 .pctstep { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.pctstep button { width: 30px; height: 26px; font-size: 16px; font-weight: 700; line-height: 1; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: #2563eb; cursor: pointer; }
-.pctstep .pctval { font-size: 13px; font-weight: 700; color: #2563eb; }
+.pctstep button { width: 30px; height: 26px; font-size: 16px; font-weight: 700; line-height: 1; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--accent); cursor: pointer; }
+.pctstep .pctval { font-size: 13px; font-weight: 700; color: var(--accent); }
 .ctrlbtns { display: flex; gap: 6px; }
 .ctrlbtns button { flex: 1; font-size: 12px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px; cursor: pointer; background: var(--surface); }
 .ctrlbtns .open { background: #16a34a; color: #fff; border-color: #16a34a; }
 .ctrlbtns .close { background: var(--surface-2); color: var(--muted); }
 .targets { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .tlabel { font-size: 11px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: .03em; }
+.pipe-swatches { display: flex; gap: 6px; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.swatch.on { border-color: var(--text); }
 .targets label.chk { font-weight: 500; }
 .info { display: flex; flex-direction: column; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; }
 .irow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); }
 .irow b { color: var(--text); }
-.ival { color: #2563eb !important; }
+.ival { color: var(--accent) !important; }
 .iid { display: block; flex: 1; min-width: 0; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: right; }
 .conn .iid { text-align: left; }
 .conn { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 7px; }
 .crow { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--text); }
 .cdir { font-size: 10px; font-weight: 700; color: #16a34a; white-space: nowrap; }
 .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cval { font-size: 11px; color: #2563eb; font-weight: 600; white-space: nowrap; }
+.cval { font-size: 11px; color: var(--accent); font-weight: 600; white-space: nowrap; }
 /* alarms */
 .alarmbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 7; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef2f2cc; backdrop-filter: blur(2px); border: 1px solid #fca5a5; color: #b91c1c; border-radius: var(--r-sm); padding: 6px 10px; font-size: 12px; font-weight: 600; }
 .abadge { background: #dc2626; color: #fff; border-radius: 0; padding: 1px 9px; }
@@ -1330,11 +2009,11 @@ onUnmounted(() => {
 .dlgbody { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
 .dlgbody label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .dlgbody input, .dlgbody textarea, .dlgbody select { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 10px; font-size: 13px; font-family: inherit; color: var(--text); background: var(--surface); transition: border-color .15s ease, box-shadow .15s ease; }
-.dlgbody input:focus, .dlgbody textarea:focus, .dlgbody select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.dlgbody input:focus, .dlgbody textarea:focus, .dlgbody select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring-soft); }
 .dlgbody input[type=color] { height: 36px; padding: 2px; cursor: pointer; }
 .dlgbody .tlabel { margin-bottom: 6px; }
-.dlgbody .primary { margin-top: 4px; background: #2563eb; color: #fff; border: none; border-radius: var(--r-md); padding: 11px; font-weight: 700; font-size: 14px; cursor: pointer; transition: background .15s ease, transform .1s ease; }
-.dlgbody .primary:hover { background: #1d4ed8; }
+.dlgbody .primary { margin-top: 4px; background: var(--accent); color: #fff; border: none; border-radius: var(--r-md); padding: 11px; font-weight: 700; font-size: 14px; cursor: pointer; transition: background .15s ease, transform .1s ease; }
+.dlgbody .primary:hover { background: var(--accent-hover); }
 .dlgbody .primary:active { transform: scale(.98); }
 .frow { display: flex; gap: 8px; }
 .frow label { flex: 1; min-width: 0; }
@@ -1343,7 +2022,7 @@ onUnmounted(() => {
 .seg button { flex: 1; min-height: 30px; padding: 0 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; transition: background .15s ease, border-color .15s ease; }
 .seg button:hover { background: var(--surface-2); border-color: var(--muted); }
 .seg button:active { transform: scale(.97); }
-.seg .segval { flex: none; min-width: 48px; text-align: center; font-size: 13px; font-weight: 700; color: #2563eb; font-variant-numeric: tabular-nums; }
+.seg .segval { flex: none; min-width: 48px; text-align: center; font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 .lockrow { font-weight: 500; font-size: 12px; }
 .sides { display: flex; flex-wrap: wrap; gap: 8px; }
 .sides .chk { flex-direction: row; align-items: center; gap: 4px; font-weight: 500; }
@@ -1353,13 +2032,42 @@ onUnmounted(() => {
 .toolbar button.ai { background: var(--accent); color: #fff; padding: 6px 12px; }
 .toolbar button.ai:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: #fff; }
 .toolbar button.ai:disabled { opacity: .5; cursor: not-allowed; }
-.aierr { font-size: 12px; font-weight: 600; color: #dc2626; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25); border-radius: var(--r-md); padding: 8px 10px; }
-.aiprev { display: flex; align-items: center; gap: 14px; border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; background: var(--surface-2); }
-.aiprevsvg { flex: none; max-width: 130px; max-height: 90px; }
-.aiprevmeta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+.aipanel { position: fixed; top: 0; right: 0; bottom: 0; width: 360px; max-width: 94vw; z-index: 900; background: var(--surface-elevated); border-left: 1px solid var(--border); box-shadow: var(--shadow-modal); display: flex; flex-direction: column; animation: aislide .22s cubic-bezier(.2,.8,.25,1); }
+@keyframes aislide { from { transform: translateX(100%); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
+.aihead { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.aihead-ic { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: #fff; }
+.aihead-t { display: flex; flex-direction: column; min-width: 0; }
+.aihead-t b { font-size: 14px; color: var(--text); }
+.aihead-t span { font-size: 11px; color: var(--muted); }
+.aiclose { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.aiclose:hover { background: var(--surface-2); color: var(--text); }
+.aipanelbody { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.ailabel { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.aita { width: 100%; resize: vertical; font: inherit; font-size: 13px; line-height: 1.45; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+.aita:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.aichips { display: flex; flex-wrap: wrap; gap: 6px; }
+.aichip { font-size: 11.5px; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; transition: all .15s ease; text-align: left; }
+.aichip:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.aierr { font-size: 12px; font-weight: 600; color: #dc2626; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25); border-radius: var(--r-md); padding: 9px 11px; }
+.aiload { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 10px 2px; }
+.aispin { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: aispin .7s linear infinite; }
+@keyframes aispin { to { transform: rotate(360deg); } }
+.aiprev { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
+.aiprevstage { display: grid; place-items: center; padding: 16px; min-height: 110px; background:
+  repeating-conic-gradient(color-mix(in srgb, var(--border) 40%, transparent) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px; }
+.aiprevsvg { max-width: 200px; max-height: 130px; filter: drop-shadow(0 2px 5px rgba(15,23,42,.25)); }
+.aiprevmeta { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .aiprevmeta b { color: var(--text); font-size: 13px; }
+.aitags { display: flex; flex-wrap: wrap; gap: 5px; }
+.aitag { font-size: 10.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 5px; padding: 3px 7px; }
+.aiactions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 8px; }
+.aigen, .aiadd { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; font-size: 13px; font-weight: 700; border-radius: var(--r-md); padding: 10px 12px; cursor: pointer; transition: filter .15s ease; }
+.aigen { background: var(--accent); color: #fff; }
+.aigen:hover:not(:disabled), .aiadd:hover:not(:disabled) { filter: brightness(1.07); }
+.aigen:disabled, .aiadd:disabled { opacity: .5; cursor: not-allowed; }
+.aiadd { background: #16a34a; color: #fff; }
 
-/* ---------- responsive: palette/inspector become off-canvas drawers ---------- */
+/* ---------- responsive: sidebar/inspector become off-canvas drawers ---------- */
 .drawer-toggle { display: none; }
 .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 900; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
 .drawer-backdrop.show { opacity: 1; pointer-events: auto; }
@@ -1369,19 +2077,21 @@ onUnmounted(() => {
   .drawer-toggle { display: inline-flex; }
   .drawer-backdrop { display: block; }
   .cols { position: relative; }
-  .palette, .inspector {
-    position: fixed; top: 0; bottom: 0; width: 260px; z-index: 901;
-    transition: transform .25s ease;
+  .rail {
+    position: fixed; top: 0; bottom: 0; left: 0; width: 260px; z-index: 901;
+    transition: transform .25s ease; transform: translateX(0);
   }
-  .palette { left: 0; transform: translateX(-100%); border-right: 1px solid var(--border); }
-  .palette.open { transform: translateX(0); }
-  .inspector { right: 0; width: 280px; transform: translateX(100%); border-left: 1px solid var(--border); }
+  .rail.collapsed { width: 260px; padding: 16px 12px; overflow: visible; transform: translateX(-100%); }
+  .inspector {
+    position: fixed; top: 0; bottom: 0; right: 0; width: 280px; z-index: 901;
+    transition: transform .25s ease; transform: translateX(100%); border-left: 1px solid var(--border);
+  }
   .inspector.open { transform: translateX(0); }
 }
 
 @media (max-width: 480px) {
   .toolbar > strong { display: none; }
-  .palette, .inspector { width: 88vw; }
+  .rail, .inspector { width: 88vw; }
   .fsinner { width: 96vw; height: 90vh; }
 }
 </style>
