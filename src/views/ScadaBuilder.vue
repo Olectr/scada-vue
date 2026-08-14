@@ -1,5 +1,6 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import * as joint from '@joint/core'
 import { CylTank, Hopper, Pump, Valve, Zone, PGauge, Control, Chart, Quality, Tap, FlowMeter, Note, Custom, customPath, FlowPipe, Leader, portsCfg, Instrument, INSTRUMENT_DEFS, WellCard, SumPanel, StatusDot, SCALE_BASE, applyScale } from '../scada/shapes'
 import { simulateTick, refreshLinks, setPumpVisual, setValveVisual, setTankMarks, layoutGaugeBands, setDotVisual, sumPanel, TAGS } from '../scada/simulate'
@@ -8,7 +9,14 @@ import TrendChart from '../components/TrendChart.vue'
 import { useAuth } from '../composables/useAuth'
 import { FilePlus2, Save, Trash2, Undo2, Redo2, Copy, Download, Upload, Image as ImageIcon, Sparkles, Moon, Pencil, Play, X, Lock as LockIcon, Unlock, Cylinder, Triangle, Fan, Diamond, Gauge, CircleDot, Waves, SlidersHorizontal, Flag, FlaskConical, LineChart, Tag, Shapes, Plus, PanelLeft, PanelRight, Disc, ArrowRightCircle, Merge, Droplets, Wind, Radar, Waypoints, Menu, Search, ChevronLeft, ChevronRight, ChevronDown, ShoppingBasket, MoreHorizontal, LogOut, Sigma, Circle } from 'lucide-vue-next'
 const { user, logout } = useAuth()
+const { t, locale } = useI18n()
 const props = defineProps({ clock: { type: String, default: '' }, today: { type: String, default: '' }, version: { type: String, default: '' } })
+const currentLocale = ref(localStorage.getItem('locale') || 'zh-CN')
+function toggleLocale() {
+  const next = currentLocale.value === 'zh-CN' ? 'en' : 'zh-CN'
+  currentLocale.value = next
+  window.__setLocale?.(next)
+}
 const PALETTE_ICON = { tank: Cylinder, hopper: Triangle, pump: Fan, valve: Diamond, gauge: Gauge, tap: CircleDot, flow: Waves, control: SlidersHorizontal, zone: Flag, quality: FlaskConical, chart: LineChart, note: Tag, well: Droplets, sum: Sigma, dot: Circle }
 const INSTRUMENT_PALETTE_ICON = { manualValve: Disc, nrv: ArrowRightCircle, pressureTransmitter: Gauge, instValve: Merge, turbidity: Droplets, flowTransmitter: Wind, radarLevel: Radar, chlorineAnalyzer: FlaskConical, hydrostaticLevel: Waypoints }
 const PID_PALETTE_ICON = { pidColumn: Cylinder, pidDrum: Cylinder, pidLevelBox: Gauge, pidHxH: Merge, pidHxV: Merge, pidCooler: Wind, pidHxInline: Merge, pidPump: Fan, pidValve: Diamond, pidCtrlValve: SlidersHorizontal, pid3Way: Waypoints, pidFlowBox: Waves, pidTempBox: Gauge, pidLight: CircleDot, pidAccum: Cylinder }
@@ -23,17 +31,17 @@ const mode = ref('edit') // 'edit' | 'run'
 let paper = null, graph = null, fitRO = null, onResize = null, simTimer = null
 
 // --- in-app dialog (replaces native confirm/alert/prompt) ---
-const dlg = reactive({ open: false, mode: 'confirm', title: '', message: '', value: '', okText: 'OK', danger: false })
+const dlg = reactive({ open: false, mode: 'confirm', title: '', message: '', value: '', okText: t('common.ok'), danger: false })
 let dlgResolve = null
 function openDialog(opts) {
-  Object.assign(dlg, { open: true, mode: 'confirm', title: '', message: '', value: '', okText: 'OK', danger: false }, opts)
+  Object.assign(dlg, { open: true, mode: 'confirm', title: '', message: '', value: '', okText: t('common.ok'), danger: false }, opts)
   return new Promise(r => { dlgResolve = r })
 }
 function dlgOk() { dlg.open = false; const r = dlgResolve; dlgResolve = null; if (r) r(dlg.mode === 'prompt' ? (dlg.value || '').trim() : true) }
 function dlgCancel() { dlg.open = false; const r = dlgResolve; dlgResolve = null; if (r) r(dlg.mode === 'prompt' ? null : false) }
-function confirmBox(message, o = {}) { return openDialog({ mode: 'confirm', message, title: o.title || 'Confirm', okText: o.okText || 'OK', danger: !!o.danger }) }
-function alertBox(message, title = 'Notice') { return openDialog({ mode: 'alert', message, title, okText: 'OK' }) }
-function promptBox(message, value = '', title = 'Enter') { return openDialog({ mode: 'prompt', message, value, title, okText: 'Save' }) }
+function confirmBox(message, o = {}) { return openDialog({ mode: 'confirm', message, title: o.title || t('common.confirm'), okText: o.okText || t('common.ok'), danger: !!o.danger }) }
+function alertBox(message, title = t('common.notice')) { return openDialog({ mode: 'alert', message, title, okText: t('common.ok') }) }
+function promptBox(message, value = '', title = t('builder.enter')) { return openDialog({ mode: 'prompt', message, value, title, okText: t('common.save') }) }
 const dlgInput = ref(null)
 watch(() => dlg.open, o => { if (o && dlg.mode === 'prompt') nextTick(() => { dlgInput.value && (dlgInput.value.focus(), dlgInput.value.select()) }) })
 
@@ -43,7 +51,7 @@ const currentName = ref('')
 function loadIndex() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} } }
 function refreshNames() { names.value = Object.keys(loadIndex()) }
 async function saveLayout() {
-  const name = await promptBox('Save layout as:', currentName.value || 'My SCADA', 'Save layout')
+  const name = await promptBox(t('dialog.saveLayout'), currentName.value || t('builder.defaultName'), t('builder.saveLayout'))
   if (!name) return
   const idx = loadIndex(); idx[name] = graph.toJSON()
   localStorage.setItem(LS_KEY, JSON.stringify(idx))
@@ -60,13 +68,13 @@ function loadLayout(name) {
 }
 async function deleteLayout() {
   if (!currentName.value) return
-  if (!(await confirmBox(`Delete layout "${currentName.value}"?`, { title: 'Delete layout', okText: 'Delete', danger: true }))) return
+  if (!(await confirmBox(t('dialog.deleteLayout', { name: currentName.value }), { title: t('builder.deleteLayout'), okText: t('common.delete'), danger: true }))) return
   const idx = loadIndex(); delete idx[currentName.value]
   localStorage.setItem(LS_KEY, JSON.stringify(idx))
   currentName.value = ''; refreshNames()
 }
 async function newLayout() {
-  if (!(await confirmBox('Clear the canvas and start a new layout?', { title: 'New layout', okText: 'Clear', danger: true }))) return
+  if (!(await confirmBox(t('dialog.newLayout'), { title: t('builder.newLayout'), okText: t('common.clear'), danger: true }))) return
   mode.value = 'edit'; graph.clear(); selectEl(null); currentName.value = ''
   for (const k in counters) delete counters[k]
   resetHistory()
@@ -75,7 +83,7 @@ async function newLayout() {
 // starter templates — build a ready-made screen the user can tweak
 async function loadTemplate(kind) {
   if (!kind || !graph) return
-  if (graph.getElements().length && !(await confirmBox('Replace the canvas with this template?', { title: 'Load template', okText: 'Replace', danger: true }))) return
+  if (graph.getElements().length && !(await confirmBox(t('dialog.replaceTemplate'), { title: t('builder.loadTemplate'), okText: t('builder.replaceBtn'), danger: true }))) return
   mode.value = 'edit'
   graph.clear(); for (const k in counters) delete counters[k]
   const mk = type => { const e = makeEl(type); graph.addCell(e); return e }
@@ -438,7 +446,7 @@ function importJson(e) {
   r.onload = () => {
     let g
     try { const env = JSON.parse(r.result); g = env && env.graph ? env.graph : env }
-    catch { alertBox('Invalid JSON file.', 'Import failed'); return }
+    catch { alertBox(t('dialog.invalidJSON'), t('dialog.importFailed')); return }
     try {
       mode.value = 'edit'
       graph.fromJSON(g)
@@ -446,29 +454,46 @@ function importJson(e) {
       reseedCounters()
       currentName.value = ''
       selectEl(null); syncOverlays(); resetHistory()
-    } catch { alertBox('This JSON is not a SCADA layout (could not rebuild the screen).', 'Import failed') }
+    } catch { alertBox(t('dialog.notSCADAJson'), t('dialog.importFailed')) }
   }
   r.readAsText(f)
 }
 
-const palette = [
-  { type: 'tank', label: 'Tank', ico: '🛢' },
-  { type: 'hopper', label: 'Hopper', ico: '⏏' },
-  { type: 'pump', label: 'Pump', ico: '⚙' },
-  { type: 'valve', label: 'Valve', ico: '▽' },
-  { type: 'gauge', label: 'Pressure Gauge', ico: 'Ⓟ' },
-  { type: 'tap', label: 'Pressure Tap', ico: '◉' },
-  { type: 'flow', label: 'Flow Meter', ico: '🌊' },
-  { type: 'control', label: 'Control', ico: '🎚' },
-  { type: 'zone', label: 'Zone', ico: '⚑' },
-  { type: 'quality', label: 'Water Quality', ico: '🧪' },
-  { type: 'chart', label: 'Chart', ico: '📈' },
-  { type: 'note', label: 'Label', ico: '📝' },
-  { type: 'well', label: 'Injection Well', ico: '⛲' },
-  { type: 'sum', label: 'Injection Summary', ico: '∑' },
-  { type: 'dot', label: 'Status Dot', ico: '⬤' },
-  ...INSTRUMENT_DEFS.map(def => ({ type: 'instrument', key: def.key, label: def.label, icon: INSTRUMENT_PALETTE_ICON[def.key] })),
+const basePalette = [
+  { type: 'tank', labelKey: 'palette.tank', ico: '🛢' },
+  { type: 'hopper', labelKey: 'palette.hopper', ico: '⏏' },
+  { type: 'pump', labelKey: 'palette.pump', ico: '⚙' },
+  { type: 'valve', labelKey: 'palette.valve', ico: '▽' },
+  { type: 'gauge', labelKey: 'palette.gauge', ico: 'Ⓟ' },
+  { type: 'tap', labelKey: 'palette.tap', ico: '◉' },
+  { type: 'flow', labelKey: 'palette.flow', ico: '🌊' },
+  { type: 'control', labelKey: 'palette.control', ico: '🎚' },
+  { type: 'zone', labelKey: 'palette.zone', ico: '⚑' },
+  { type: 'quality', labelKey: 'palette.quality', ico: '🧪' },
+  { type: 'chart', labelKey: 'palette.chart', ico: '📈' },
+  { type: 'note', labelKey: 'palette.note', ico: '📝' },
+  { type: 'well', labelKey: 'palette.well', ico: '⛲' },
+  { type: 'sum', labelKey: 'palette.sum', ico: '∑' },
+  { type: 'dot', labelKey: 'palette.dot', ico: '⬤' },
 ]
+
+const instrumentPalette = computed(() =>
+  INSTRUMENT_DEFS.map(def => ({
+    type: 'instrument',
+    key: def.key,
+    labelKey: `instruments.${def.key}`,
+    icon: INSTRUMENT_PALETTE_ICON[def.key],
+  }))
+)
+
+const pidPalette = computed(() =>
+  PID_DEFS.map(pd => ({ ...pd, label: t('pid.' + pd.key) }))
+)
+
+const palette = computed(() => [
+  ...basePalette.map(item => ({ ...item, label: t(item.labelKey) })),
+  ...instrumentPalette.value.map(item => ({ ...item, label: t(item.labelKey) })),
+])
 
 const counters = reactive({})
 function nextName(base) { counters[base] = (counters[base] || 0) + 1; return `${base} ${counters[base]}` }
@@ -516,22 +541,22 @@ function stripMetricDuplicates(cell) {
 function makeEl(type, key) {
   const x = STAGE_W / 2 - 75, y = STAGE_H / 2 - 100
   switch (type) {
-    case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName('Tank') } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) }); setTankMarks(tk); return tk }
-    case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName('Hopper') } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95, metrics: defaultMetrics(['level']) })
-    case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName('Pump') } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2, metrics: defaultMetrics(['on', 'pressure', 'runtime']) })
-    case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName('Valve') } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true, metrics: defaultMetrics(['open']) })
-    case 'gauge': { const g = new PGauge({ position: { x, y }, attrs: { name: { text: nextName('Gauge') } }, value: 4, simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) }); layoutGaugeBands(g); return g }
-    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName('Control') } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true, metrics: defaultMetrics(['pct']) })
-    case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName('Zone') } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
-    case 'tap': return new Tap({ position: { x, y }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true), metrics: defaultMetrics(['pressure']) })
-    case 'flow': return new FlowMeter({ position: { x, y }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true), metrics: defaultMetrics(['flow', 'total']) })
-    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName('Quality') }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
-    case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName('Chart') } } })
-    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName('Label') } }, metrics: defaultMetrics(['label']) })
-    case 'well': return new WellCard({ position: { x, y }, attrs: { name: { text: nextName('Well') } }, rate: 40, simMin: 20, simMax: 90, produced: false, ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
-    case 'sum': return new SumPanel({ position: { x, y }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
-    case 'dot': return new StatusDot({ position: { x, y }, watch: null, round: false, metrics: defaultMetrics(['state']) })
-    case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(def.label) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true), metrics: defaultMetrics(INSTRUMENT_METRIC_KEYS[key] || []) }) }
+    case 'tank': { const tk = new CylTank({ position: { x, y }, attrs: { name: { text: nextName(t('palette.tank')) } }, ports: portsCfg([{ id: 'top', x: 150, y: 60 }, { id: 'bot', x: 150, y: 205 }], true), level: 60, simMin: 20, simMax: 70, metrics: defaultMetrics(['level']) }); setTankMarks(tk); return tk }
+    case 'hopper': return new Hopper({ position: { x, y }, attrs: { name: { text: nextName(t('palette.hopper')) } }, ports: portsCfg([{ id: 'in', x: 0, y: 62 }, { id: 'bot', x: 85, y: 222 }], true), level: 50, simMin: 20, simMax: 95, metrics: defaultMetrics(['level']) })
+    case 'pump': return new Pump({ position: { x, y }, attrs: { name: { text: nextName(t('palette.pump')) } }, ports: portsCfg([{ id: 'l', x: 0, y: 46 }, { id: 'r', x: 92, y: 46 }], true), on: true, pressure: 2, metrics: defaultMetrics(['on', 'pressure', 'runtime']) })
+    case 'valve': return new Valve({ position: { x, y }, attrs: { name: { text: nextName(t('palette.valve')) } }, ports: portsCfg([{ id: 'l', x: 8, y: 66 }, { id: 'r', x: 68, y: 66 }], true), open: true, metrics: defaultMetrics(['open']) })
+    case 'gauge': { const g = new PGauge({ position: { x, y }, attrs: { name: { text: nextName(t('palette.gauge')) } }, value: 4, simMin: 0, simMax: 8, bandYellow: 60, bandRed: 85, ports: portsCfg([{ id: 'p', x: 48, y: 96 }], true), metrics: defaultMetrics(['value']) }); layoutGaugeBands(g); return g }
+    case 'control': return new Control({ position: { x, y }, attrs: { name: { text: nextName(t('palette.control')) } }, pct: 100, targets: [], showSlider: true, showOpen: true, showClose: true, metrics: defaultMetrics(['pct']) })
+    case 'zone': return new Zone({ position: { x, y }, attrs: { name: { text: nextName(t('palette.zone')) } }, ports: portsCfg([{ id: 'p', x: 0, y: 20 }], true) })
+    case 'tap': return new Tap({ position: { x, y }, attrs: { name: { text: nextName(t('palette.tap')) } }, pressure: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }, { id: 't', x: 42, y: 1 }], true), metrics: defaultMetrics(['pressure']) })
+    case 'flow': return new FlowMeter({ position: { x, y }, attrs: { name: { text: nextName(t('palette.flow')) } }, flow: 0, ports: portsCfg([{ id: 'l', x: 0, y: 24 }, { id: 'r', x: 84, y: 24 }], true), metrics: defaultMetrics(['flow', 'total']) })
+    case 'quality': return new Quality({ position: { x, y }, ph: 7.2, turb: 0.8, cl: 1.2, do: 8.4, attrs: { title: { text: nextName(t('palette.quality')) }, phV: { text: '7.20' }, tbV: { text: '0.80 NTU' }, clV: { text: '1.20 mg/L' }, doV: { text: '8.4 mg/L' } }, metrics: defaultMetrics(['ph', 'turbidity', 'chlorine', 'dissolvedOxygen']) })
+    case 'chart': return new Chart({ position: { x: STAGE_W / 2 - 160, y }, attrs: { name: { text: nextName(t('palette.chart')) } } })
+    case 'note': return new Note({ position: { x, y }, attrs: { name: { text: nextName(t('palette.note')) } }, metrics: defaultMetrics(['label']) })
+    case 'well': return new WellCard({ position: { x, y }, attrs: { name: { text: nextName(t('palette.well')) } }, rate: 40, simMin: 20, simMax: 90, produced: false, ports: portsCfg([{ id: 'in', x: 39, y: 0 }], true), metrics: defaultMetrics(['rate']) })
+    case 'sum': return new SumPanel({ position: { x, y }, attrs: { name: { text: nextName(t('palette.sum')) } }, total: 0, prod: 0, metrics: defaultMetrics(['total', 'prod']) })
+    case 'dot': return new StatusDot({ position: { x, y }, attrs: { name: { text: nextName(t('palette.dot')) } }, watch: null, round: false, metrics: defaultMetrics(['state']) })
+    case 'instrument': { const def = INSTRUMENT_DEFS.find(d => d.key === key); if (!def) return null; return new Instrument({ position: { x, y }, attrs: { glyph: { d: def.glyph }, name: { text: nextName(t('instruments.' + def.key)) } }, ports: portsCfg([{ id: 'l', x: 8, y: 28 }, { id: 'r', x: 64, y: 28 }], true), metrics: defaultMetrics(INSTRUMENT_METRIC_KEYS[key] || []) }) }
   }
 }
 function addComponent(item) {
@@ -597,7 +622,7 @@ function makeCustom(def, x, y) {
   const w = def.w || 96, h = def.h || 60
   const el = new Custom({
     position: { x: x ?? STAGE_W / 2 - w / 2, y: y ?? STAGE_H / 2 - h / 2 }, size: { width: w, height: h },
-    attrs: { name: { text: nextName(def.label || 'Custom') } },
+    attrs: { name: { text: nextName(def.label || t('palette.custom')) } },
     shape: def.shape || 'box', icon: def.icon || '', glyph: def.glyph || '', svgBody: def.svg || '',
     svgVB: def.svgVB || (def.svg ? parseSvgVB(def.svg) : null),
     // older AI defs saved before levelZone existed get an approximate centered zone
@@ -628,7 +653,7 @@ function importCompLib(e) {
       const have = new Set(customComps.value.map(c => c.id))
       customComps.value = [...customComps.value, ...arr.filter(c => c && c.id && !have.has(c.id))]
       persistCustomComps()
-    } catch { alertBox('Invalid component library file.', 'Import failed') }
+    } catch { alertBox(t('dialog.invalidCompLib'), t('dialog.importFailed')) }
   }
   r.readAsText(f)
 }
@@ -664,14 +689,16 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const AI_MODEL = import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-sonnet-5'
 const aiComp = reactive({ open: false, prompt: '', loading: false, error: '', result: null })
 function openAiComp() { aiComp.open = true; aiComp.error = '' }
-const AI_EXAMPLES = [
-  'Stainless steel storage tank with level',
-  'Centrifugal pump with motor, on/off',
-  'Motorized butterfly valve, open/close',
-  'Electromagnetic flow meter 0–500 m³/h',
-  'Chlorine dosing tank with level',
-  'UV disinfection unit, on/off',
-]
+const AI_EXAMPLES = computed(() => [
+  t('builder.aiEx1'),
+  t('builder.aiEx2'),
+  t('builder.aiEx3'),
+  t('builder.aiEx4'),
+  t('builder.aiEx5'),
+  t('builder.aiEx6'),
+])
+const AI_BEHAVIOR_KEYS = { onoff: 'aiBehOnOff', meter: 'aiBehMeter', level: 'aiBehLevel', openclose: 'aiBehOpenClose', static: 'aiBehStatic' }
+function aiBehLabel(b) { return t('builder.' + (AI_BEHAVIOR_KEYS[b] || 'aiBehStatic')) }
 // pull the first balanced JSON object out of model text (reasoning models wrap it in <think> blocks / prose)
 function extractJson(text) {
   const t = String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -757,7 +784,7 @@ async function generateAiComp() {
   const prompt = (aiComp.prompt || '').trim()
   if (!prompt || aiComp.loading) return
   const key = import.meta.env.VITE_OPENROUTER_API_KEY
-  if (!key) { aiComp.error = 'No API key found. Put VITE_OPENROUTER_API_KEY=sk-or-... in .env and restart the dev server.'; return }
+  if (!key) { aiComp.error = t('dialog.noAPIKey'); return }
   aiComp.loading = true; aiComp.error = ''; aiComp.result = null
   try {
     const r = await fetch(OPENROUTER_URL, {
@@ -774,7 +801,7 @@ async function generateAiComp() {
     })
     if (!r.ok) {
       const detail = await r.json().then(j => j?.error?.message || '').catch(() => '')
-      const err = new Error(detail || `Request failed (${r.status})`)
+      const err = new Error(detail || t('dialog.requestFailed', { status: r.status }))
       err.status = r.status
       throw err
     }
@@ -785,17 +812,17 @@ async function generateAiComp() {
     const parsed = extractJson(msg.content) || extractJson(msg.reasoning)
     if (!parsed) {
       throw new Error(choice.finish_reason === 'length'
-        ? 'Model ran out of tokens while thinking — Regenerate, or switch to a stronger model via VITE_OPENROUTER_MODEL.'
-        : `Model "${AI_MODEL}" returned no valid JSON — Regenerate, or set a stronger model via VITE_OPENROUTER_MODEL.`)
+        ? t('dialog.tokenLimit')
+        : t('dialog.noValidJson', { model: AI_MODEL }))
     }
     aiComp.result = normalizeAiComp(parsed)
   } catch (err) {
     aiComp.result = null
-    aiComp.error = err?.status === 401 ? 'API key rejected (401). Check VITE_OPENROUTER_API_KEY.'
-      : err?.status === 402 ? 'OpenRouter credits exhausted (402). Top up your account.'
-      : err?.status === 404 ? `Model "${AI_MODEL}" not found on OpenRouter (404). Set VITE_OPENROUTER_MODEL in .env to a valid model id.`
-      : err?.status === 429 ? 'Rate limited (429). Wait a moment and retry.'
-      : (err?.message || 'Generation failed — check network/key and retry.')
+    aiComp.error = err?.status === 401 ? t('dialog.apiKeyRejected')
+      : err?.status === 402 ? t('dialog.creditsExhausted')
+      : err?.status === 404 ? t('dialog.modelNotFound')
+      : err?.status === 429 ? t('dialog.rateLimited')
+      : (err?.message || t('dialog.generationFailed'))
   } finally { aiComp.loading = false }
 }
 function saveAiComp() {
@@ -906,29 +933,32 @@ function applyDevtag() { const m = selModel(); if (m) m.set('devtag', sel.devtag
 
 // per-type live readout rows
 function liveFields(m) {
-  const t = m.get('type'), F = []
+  const ty = m.get('type'), F = []
   const add = (l, v) => F.push({ l, v })
-  if (t === 's.Cyl' || t === 's.Hopper') add('Level', Math.round(m.get('level') ?? 0) + '%')
-  else if (t === 's.Pump') { add('State', m.get('on') ? 'ON' : 'OFF'); add('Pressure', Number(m.get('pressure') ?? 0).toFixed(1) + ' bar'); const s = m.get('runtime') || 0; add('Runtime', Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm') }
-  else if (t === 's.Valve') add('State', m.get('open') ? 'OPEN' : 'CLOSED')
-  else if (t === 's.PG') add('Pressure', Number(m.get('value') ?? 0).toFixed(1) + ' bar')
-  else if (t === 's.Tap') add('Pressure', Number(m.get('pressure') ?? 0).toFixed(1) + ' bar')
-  else if (t === 's.Flow') { add('Flow', (m.get('flow') ?? 0) + ' m³/h'); add('Total', Math.round(m.get('total') || 0) + ' m³') }
-  else if (t === 's.Control') { add('Open', (m.get('pct') ?? 0) + '%'); add('Drives', (m.get('targets') || []).filter(id => graph.getCell(id)).length) }
-  else if (t === 's.Quality') { add('pH', Number(m.get('ph') ?? 0).toFixed(2)); add('Turb', Number(m.get('turb') ?? 0).toFixed(2) + ' NTU'); add('Cl', Number(m.get('cl') ?? 0).toFixed(2)); add('DO', Number(m.get('do') ?? 0).toFixed(1)) }
-  else if (t === 's.Well') { add('Rate', Math.round(m.get('rate') ?? 0) + ' m³/h'); add('Water', m.get('produced') ? 'produced' : 'injection') }
-  else if (t === 's.Sum') { add('Total', Math.round(m.get('total') ?? 0) + ' m³/h'); add('Produced', Math.round(m.get('prod') ?? 0) + ' m³/h') }
-  else if (t === 's.Dot') { const tgt = m.get('watch') && graph.getCell(m.get('watch')); add('Watching', tgt ? nameOf(tgt) : '—'); add('State', tgt ? elemValue(tgt) : 'unbound') }
-  else if (t === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add('Level', Math.max(0, Math.min(100, Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100))) + '%'); else if (b === 'meter') add('Value', Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add('State', m.get('on') ? 'ON' : 'OFF'); else if (b === 'openclose') add('State', m.get('open') ? 'OPEN' : 'CLOSED') }
+  if (ty === 's.Cyl' || ty === 's.Hopper') add(t('info.level'), Math.round(m.get('level') ?? 0) + t('units.percent'))
+  else if (ty === 's.Pump') { add(t('info.state'), m.get('on') ? t('common.on') : t('common.off')); add(t('info.pressure'), Number(m.get('pressure') ?? 0).toFixed(1) + t('units.bar')); const s = m.get('runtime') || 0; add(t('info.runtime'), t('units.hourShort', { n: Math.floor(s / 3600) }) + ' ' + t('units.minuteShort', { n: Math.floor((s % 3600) / 60) })) }
+  else if (ty === 's.Valve') add(t('info.state'), m.get('open') ? t('common.open') : t('common.closed'))
+  else if (ty === 's.PG') add(t('info.pressure'), Number(m.get('value') ?? 0).toFixed(1) + t('units.bar'))
+  else if (ty === 's.Tap') add(t('info.pressure'), Number(m.get('pressure') ?? 0).toFixed(1) + t('units.bar'))
+  else if (ty === 's.Flow') { add(t('info.flow'), (m.get('flow') ?? 0) + t('units.cubicMeterPerHour')); add(t('info.total'), Math.round(m.get('total') || 0) + t('units.cubicMeter')) }
+  else if (ty === 's.Control') { add(t('info.open'), (m.get('pct') ?? 0) + t('units.percent')); add(t('info.drives'), (m.get('targets') || []).filter(id => graph.getCell(id)).length) }
+  else if (ty === 's.Quality') { add(t('info.ph'), Number(m.get('ph') ?? 0).toFixed(2)); add(t('info.turb'), Number(m.get('turb') ?? 0).toFixed(2) + t('units.ntu')); add(t('info.cl'), Number(m.get('cl') ?? 0).toFixed(2)); add(t('info.do'), Number(m.get('do') ?? 0).toFixed(1)) }
+  else if (ty === 's.Well') { add(t('info.rate'), Math.round(m.get('rate') ?? 0) + t('units.cubicMeterPerHour')); add(t('info.water'), m.get('produced') ? t('info.produced') : t('info.injection')) }
+  else if (ty === 's.Sum') { add(t('info.total'), Math.round(m.get('total') ?? 0) + t('units.cubicMeterPerHour')); add(t('info.produced'), Math.round(m.get('prod') ?? 0) + t('units.cubicMeterPerHour')) }
+  else if (ty === 's.Dot') { const tgt = m.get('watch') && graph.getCell(m.get('watch')); add(t('info.watching'), tgt ? nameOf(tgt) : '—'); add(t('info.state'), tgt ? elemValue(tgt) : t('info.unbound')) }
+  else if (ty === 's.Custom') { const b = m.get('behavior'); if (b === 'level') add(t('info.level'), Math.max(0, Math.min(100, Math.round((((m.get('level') ?? 0) - (m.get('vmin') ?? 0)) / ((m.get('vmax') ?? 100) - (m.get('vmin') ?? 0) || 1)) * 100))) + t('units.percent')); else if (b === 'meter') add(t('info.value'), Number(m.get('value') ?? 0).toFixed(1) + ' ' + (m.get('unit') || '')); else if (b === 'onoff') add(t('info.state'), m.get('on') ? t('common.on') : t('common.off')); else if (b === 'openclose') add(t('info.state'), m.get('open') ? t('common.open') : t('common.closed')) }
   return F
 }
 // pipe styling — separate selection for links (FlowPipe)
 const linkSel = reactive({ id: null, color: '#16a34a', width: 7 })
-const PIPE_PRESETS = [
-  { label: 'Default', color: '#c5cdd6' }, { label: 'Steam', color: '#ef4444' },
-  { label: 'Nitrogen', color: '#8b93f5' }, { label: 'Cooling water', color: '#22c55e' },
-  { label: 'Accent', color: '#f59e0b' },
+const PIPE_PRESET_KEYS = [
+  { key: 'pipePresets.default', color: '#c5cdd6' },
+  { key: 'pipePresets.steam', color: '#ef4444' },
+  { key: 'pipePresets.nitrogen', color: '#8b93f5' },
+  { key: 'pipePresets.coolingWater', color: '#22c55e' },
+  { key: 'pipePresets.accent', color: '#f59e0b' },
 ]
+const PIPE_PRESETS = computed(() => PIPE_PRESET_KEYS.map(p => ({ label: t(p.key), color: p.color })))
 function applyPipePreset(hex) { linkSel.color = hex; applyPipe() }
 function selectLink(m) {
   if (!m) { linkSel.id = null; return }
@@ -944,38 +974,39 @@ function applyPipe() {
   m.attr('wrap/strokeWidth', Number(linkSel.width) + 6)
 }
 function deletePipe() { const m = linkSel.id && graph.getCell(linkSel.id); if (m) { m.remove(); linkSel.id = null } }
-const TYPE_LABEL = { 's.Cyl': 'Tank', 's.Hopper': 'Hopper', 's.Pump': 'Pump', 's.Valve': 'Valve', 's.PG': 'Pressure Gauge', 's.Control': 'Control', 's.Zone': 'Zone', 's.Chart': 'Chart', 's.Quality': 'Water Quality', 's.Tap': 'Pressure Tap', 's.Flow': 'Flow Meter', 's.Note': 'Label', 's.Custom': 'Custom', 's.Instrument': 'Instrument', 's.Well': 'Injection Well', 's.Sum': 'Injection Summary', 's.Dot': 'Status Dot' }
+const TYPE_LABEL = { 's.Cyl': 'palette.tank', 's.Hopper': 'palette.hopper', 's.Pump': 'palette.pump', 's.Valve': 'palette.valve', 's.PG': 'palette.gauge', 's.Control': 'palette.control', 's.Zone': 'palette.zone', 's.Chart': 'palette.chart', 's.Quality': 'palette.quality', 's.Tap': 'palette.tap', 's.Flow': 'palette.flow', 's.Note': 'palette.note', 's.Custom': 'palette.custom', 's.Instrument': 'palette.instrument', 's.Well': 'palette.well', 's.Sum': 'palette.sum', 's.Dot': 'palette.dot' }
+function typeLabel(type) { return t(TYPE_LABEL[type] || type) }
 function elemValue(e) {
   switch (e.get('type')) {
-    case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + '%'
-    case 's.Pump': return (e.get('on') ? 'ON' : 'OFF') + ' · ' + Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
-    case 's.Valve': return e.get('open') ? 'OPEN' : 'CLOSED'
-    case 's.PG': return Number(e.get('value') ?? 0).toFixed(1) + ' bar'
-    case 's.Control': return (e.get('pct') ?? 0) + '% open'
+    case 's.Cyl': case 's.Hopper': return Math.round(e.get('level') ?? 0) + t('units.percent')
+    case 's.Pump': return (e.get('on') ? t('common.on') : t('common.off')) + ' · ' + Number(e.get('pressure') ?? 0).toFixed(1) + t('units.bar')
+    case 's.Valve': return e.get('open') ? t('common.open') : t('common.closed')
+    case 's.PG': return Number(e.get('value') ?? 0).toFixed(1) + t('units.bar')
+    case 's.Control': return t('builder.pctOpen', { pct: e.get('pct') ?? 0 })
     case 's.Quality': return 'pH ' + Number(e.get('ph') ?? 7.2).toFixed(2)
-    case 's.Flow': return (e.get('flow') ?? 0) + ' m³/h'
-    case 's.Tap': return Number(e.get('pressure') ?? 0).toFixed(1) + ' bar'
-    case 's.Well': return Math.round(e.get('rate') ?? 0) + ' m³/h'
-    case 's.Sum': return Math.round(e.get('total') ?? 0) + ' m³/h total'
+    case 's.Flow': return (e.get('flow') ?? 0) + t('units.cubicMeterPerHour')
+    case 's.Tap': return Number(e.get('pressure') ?? 0).toFixed(1) + t('units.bar')
+    case 's.Well': return Math.round(e.get('rate') ?? 0) + t('units.cubicMeterPerHour')
+    case 's.Sum': return Math.round(e.get('total') ?? 0) + t('units.cubicMeterPerHour') + t('info.total')
     default: return '—'
   }
 }
-function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/text'))) || TYPE_LABEL[e.get('type')] || e.get('type') }
+function nameOf(e) { return (e.attr && (e.attr('name/text') || e.attr('title/text'))) || typeLabel(e.get('type')) }
 // id / name / value of the selected element + everything connected to it
 function updateSelInfo() {
   const m = selModel()
   if (!m) { sel.info = null; sel.connections = []; return }
-  sel.info = { id: String(m.id), type: TYPE_LABEL[m.get('type')] || m.get('type'), fields: liveFields(m) }
+  sel.info = { id: String(m.id), type: typeLabel(m.get('type')), fields: liveFields(m) }
   if (m.get('type') === 's.Control') {
     sel.connections = (m.get('targets') || []).map(id => {
-      const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: 'drives' } : null
+      const t = graph.getCell(id); return t ? { key: 'd' + id, id: String(id), name: nameOf(t), value: elemValue(t), dir: t('builder.connDrives') } : null
     }).filter(Boolean)
   } else {
     sel.connections = graph.getConnectedLinks(m).map(l => {
       const s = l.source() && l.source().id, tg = l.target() && l.target().id
       const otherId = s === m.id ? tg : s
       const o = otherId ? graph.getCell(otherId) : null
-      return o ? { key: String(l.id), id: String(otherId), name: nameOf(o), value: elemValue(o), dir: s === m.id ? '→ to' : '← from' } : null
+      return o ? { key: String(l.id), id: String(otherId), name: nameOf(o), value: elemValue(o), dir: s === m.id ? t('builder.connTo') : t('builder.connFrom') } : null
     }).filter(Boolean)
   }
 }
@@ -1007,7 +1038,7 @@ function selectEl(model) {
     ? graph.getElements()
       .filter(e => e.get('type') === 's.Pump' || e.get('type') === 's.Valve' ||
         (e.get('type') === 's.Custom' && (e.get('behavior') === 'onoff' || e.get('behavior') === 'openclose')))
-      .map(e => ({ id: String(e.id), name: e.attr('name/text') || TYPE_LABEL[e.get('type')] || e.get('type') }))
+      .map(e => ({ id: String(e.id), name: e.attr('name/text') || typeLabel(e.get('type')) }))
     : []
   sel.isCustom = t === 's.Custom'; sel.locked = !!model.get('locked')
   sel.hasStyle = t === 's.Custom' || !!STYLE_SEL[t]
@@ -1129,7 +1160,7 @@ function syncControls() {
     .map(e => {
       const p = e.position()
       return {
-        id: e.id, x: p.x, y: p.y, pct: e.get('pct') ?? 100, name: e.attr('name/text') || 'Control',
+        id: e.id, x: p.x, y: p.y, pct: e.get('pct') ?? 100, name: e.attr('name/text') || t('builder.controlDefault'),
         showSlider: e.get('showSlider') !== false, showOpen: e.get('showOpen') !== false, showClose: e.get('showClose') !== false,
       }
     })
@@ -1211,7 +1242,7 @@ function syncCharts() {
   seedTanks()
   chartsUi.value = graph.getElements()
     .filter(e => e.get('type') === 's.Chart')
-    .map(e => { const p = e.position(), s = e.size(); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || 'Chart' } })
+    .map(e => { const p = e.position(), s = e.size(); return { id: e.id, x: p.x, y: p.y, w: s.width, h: s.height, name: e.attr('name/text') || t('builder.chartDefault') } })
   if (fsChart.value && !chartsUi.value.find(c => c.id === fsChart.value)) fsChart.value = null // close orphaned fullscreen
 }
 // rebuild both overlay sets on any structural/position change
@@ -1244,11 +1275,11 @@ function computeAlarms() {
     const t = e.get('type'); let msg = null
     if (t === 's.Cyl' || t === 's.Hopper') {
       const lvl = Math.round(e.get('level') ?? 0), lo = e.get('simMin') ?? 20
-      if (lvl < lo) msg = `LOW ${lvl}%`; else if (lvl >= 96) msg = `HIGH ${lvl}%`
+      if (lvl < lo) msg = t('builder.alarmLow', { value: lvl }); else if (lvl >= 96) msg = t('builder.alarmHigh', { value: lvl })
     } else if (t === 's.PG') {
       const v = e.get('value') ?? 0, lo = e.get('simMin') ?? 0, hi = e.get('simMax') ?? 8
       const redAt = lo + (hi - lo) * ((e.get('bandRed') ?? 85) / 100)
-      if (v >= redAt) msg = `HIGH PRESSURE ${v.toFixed(1)}`
+      if (v >= redAt) msg = t('builder.alarmHighPressure', { value: v.toFixed(1) })
     }
     if (msg) { const p = e.position(); list.push({ id: e.id, name: nameOf(e), msg }); ui.push({ id: e.id, x: p.x, y: p.y }) }
   })
@@ -1413,22 +1444,22 @@ onUnmounted(() => {
       <div class="rail-brand">
         <img class="rail-logo" src="https://metrion.blr1.cdn.digitaloceanspaces.com/metrion-favicon.svg" alt="Metrion" />
         <span class="rail-brand-name">Metrion</span>
-        <button class="rail-collapse" :title="railCollapsed ? 'Expand' : 'Collapse'" @click="railCollapsed = !railCollapsed">
+        <button class="rail-collapse" :title="railCollapsed ? t('builder.expand') : t('builder.collapse')" @click="railCollapsed = !railCollapsed">
           <component :is="railCollapsed ? ChevronRight : ChevronLeft" :size="14" />
         </button>
       </div>
       <label class="searchbox rail-search">
         <Search :size="15" />
-        <input type="text" v-model="paletteFilter" placeholder="Search components…">
+        <input type="text" v-model="paletteFilter" :placeholder="t('builder.searchPlaceholder')">
       </label>
       <div class="rail-nav rail-scroll">
-        <button class="rail-icon" :disabled="mode === 'run'" title="AI Component" @click="openAiComp">
-          <Sparkles :size="18" /> <span class="rail-icon-label">AI Component</span>
+        <button class="rail-icon" :disabled="mode === 'run'" :title="t('builder.aiComponent')" @click="openAiComp">
+          <Sparkles :size="18" /> <span class="rail-icon-label">{{ t('builder.aiComponent') }}</span>
         </button>
 
         <div class="accordion">
           <button class="accordion-head" :class="{ open: openSection === 'components' }" @click="toggleSection('components')">
-            <ShoppingBasket :size="16" /> <span class="accordion-label">Components</span>
+            <ShoppingBasket :size="16" /> <span class="accordion-label">{{ t('builder.components') }}</span>
             <ChevronDown :size="14" class="accordion-chevron" />
           </button>
           <div v-show="openSection === 'components'" class="accordion-body">
@@ -1440,11 +1471,11 @@ onUnmounted(() => {
 
         <div class="accordion">
           <button class="accordion-head" :class="{ open: openSection === 'pid' }" @click="toggleSection('pid')">
-            <Shapes :size="16" /> <span class="accordion-label">P&amp;ID Symbols</span>
+            <Shapes :size="16" /> <span class="accordion-label">{{ t('builder.pidSymbols') }}</span>
             <ChevronDown :size="14" class="accordion-chevron" />
           </button>
           <div v-show="openSection === 'pid'" class="accordion-body">
-            <button v-for="pd in filteredByName(PID_DEFS, 'label')" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
+            <button v-for="pd in filteredByName(pidPalette, 'label')" :key="pd.key" :disabled="mode === 'run'" @click="addCustom(pd)">
               <component :is="PID_PALETTE_ICON[pd.key] || Shapes" :size="16" class="ico" /> {{ pd.label }}
             </button>
           </div>
@@ -1452,29 +1483,29 @@ onUnmounted(() => {
 
         <div class="accordion">
           <button class="accordion-head" :class="{ open: openSection === 'custom' }" @click="toggleSection('custom')">
-            <Tag :size="16" /> <span class="accordion-label">My Components</span>
+            <Tag :size="16" /> <span class="accordion-label">{{ t('builder.myComponents') }}</span>
             <ChevronDown :size="14" class="accordion-chevron" />
           </button>
           <div v-show="openSection === 'custom'" class="accordion-body">
             <div v-for="c in filteredByName(customComps, 'label')" :key="c.id" class="customrow">
               <button class="ccadd" :disabled="mode === 'run'" @click="addCustom(c)"><Shapes :size="16" class="ico" /> {{ c.label }}</button>
-              <span class="ccdel" title="Delete component" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
+              <span class="ccdel" :title="t('builder.deleteComponent')" @click="deleteCustomComp(c.id)"><X :size="12" /></span>
             </div>
             <div class="liblinks">
-              <a @click="exportCompLib"><Download :size="13" /> Export</a>
-              <a @click="pickCompLib"><Upload :size="13" /> Import</a>
+              <a @click="exportCompLib"><Download :size="13" /> {{ t('common.export') }}</a>
+              <a @click="pickCompLib"><Upload :size="13" /> {{ t('common.import') }}</a>
               <input ref="libInput" type="file" accept="application/json,.json" style="display:none" @change="importCompLib">
             </div>
           </div>
         </div>
       </div>
       <div v-if="user" class="menu-wrap rail-user">
-        <button class="rail-avatar" title="Account" @click="toggleUserMenu">
+        <button class="rail-avatar" :title="t('builder.account')" @click="toggleUserMenu">
           {{ ((user.profile && user.profile.email) || 'U')[0].toUpperCase() }}
         </button>
         <div v-if="userMenuOpen" class="dropdown usermenu">
           <div class="usermenu-email">{{ user.profile && user.profile.email }}</div>
-          <button @click="userMenuOpen = false; logout()"><LogOut :size="14" /> Logout</button>
+          <button @click="userMenuOpen = false; logout()"><LogOut :size="14" /> {{ t('common.logout') }}</button>
         </div>
       </div>
       <div v-if="version" class="rail-version">{{ version }}</div>
@@ -1482,51 +1513,52 @@ onUnmounted(() => {
     <div class="shell">
       <header class="appbar">
         <div class="pagehead">
-          <button class="hb" title="Toggle menu" @click="railCollapsed = !railCollapsed"><Menu :size="18" /></button>
+          <button class="hb" :title="t('builder.toggleMenu')" @click="railCollapsed = !railCollapsed"><Menu :size="18" /></button>
           <div class="modeswitch">
-            <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> Edit</button>
-            <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> Run</button>
+            <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'"><Pencil :size="14" /> {{ t('common.edit') }}</button>
+            <button :class="{ on: mode === 'run' }" @click="mode = 'run'"><Play :size="14" /> {{ t('common.run') }}</button>
           </div>
-          <button class="pill iconOnly" :class="{ on: mode === 'run' }" :title="mode === 'run' ? 'Locked (Run mode) — click to unlock' : 'Unlocked (Edit mode) — click to lock'" @click="mode = mode === 'edit' ? 'run' : 'edit'">
+          <button class="pill iconOnly" :class="{ on: mode === 'run' }" :title="mode === 'run' ? t('builder.lockRunTitle') : t('builder.lockEditTitle')" @click="mode = mode === 'edit' ? 'run' : 'edit'">
             <component :is="mode === 'run' ? LockIcon : Unlock" :size="16" />
           </button>
           <span v-if="currentName" class="currentname">{{ currentName }}</span>
           <span class="sp"></span>
           <div v-if="today || clock" class="pagehead-time">{{ today }}<template v-if="today && clock"> · </template>{{ clock }}</div>
+          <button class="lang-btn" @click="toggleLocale">{{ currentLocale === 'zh-CN' ? 'EN' : '中文' }}</button>
           <div class="menu-wrap">
-            <button class="pill" @click="toggleAddMenu"><Plus :size="14" /> Add</button>
+            <button class="pill" @click="toggleAddMenu"><Plus :size="14" /> {{ t('builder.add') }}</button>
             <div v-if="addMenuOpen" class="dropdown" @click="addMenuOpen = false">
-              <button @click="newLayout"><FilePlus2 :size="14" /> New</button>
+              <button @click="newLayout"><FilePlus2 :size="14" /> {{ t('common.new') }}</button>
               <select class="loadsel" :value="currentName" @change="loadLayout($event.target.value)" @click.stop>
-                <option value="">Load…</option>
+                <option value="">{{ t('builder.loadList') }}</option>
                 <option v-for="n in names" :key="n" :value="n">{{ n }}</option>
               </select>
               <select class="loadsel" value="" @change="loadTemplate($event.target.value); $event.target.value = ''" @click.stop>
-                <option value="">Template…</option>
-                <option value="water">Water Treatment</option>
-                <option value="dual">Dual Pump</option>
-                <option value="chemical">Chemical Distillation</option>
-                <option value="gas">Gas Treatment</option>
-                <option value="reservoir">Reservoir Dashboard</option>
+                <option value="">{{ t('builder.templateList') }}</option>
+                <option value="water">{{ t('builder.templateWater') }}</option>
+                <option value="dual">{{ t('builder.templateDual') }}</option>
+                <option value="chemical">{{ t('builder.templateChemical') }}</option>
+                <option value="gas">{{ t('builder.templateGas') }}</option>
+                <option value="reservoir">{{ t('builder.templateReservoir') }}</option>
               </select>
             </div>
           </div>
           <div class="menu-wrap">
-            <button class="pill iconOnly" title="More" @click="toggleOverflowMenu"><MoreHorizontal :size="16" /></button>
+            <button class="pill iconOnly" :title="t('builder.more')" @click="toggleOverflowMenu"><MoreHorizontal :size="16" /></button>
             <div v-if="overflowOpen" class="dropdown" @click="overflowOpen = false">
-              <button @click="saveLayout"><Save :size="14" /> Save</button>
-              <button :disabled="!currentName" @click="deleteLayout"><Trash2 :size="14" /> Delete layout</button>
-              <button :disabled="!canUndo" @click="undo"><Undo2 :size="14" /> Undo</button>
-              <button :disabled="!canRedo" @click="redo"><Redo2 :size="14" /> Redo</button>
-              <button :disabled="!sel.id || mode === 'run'" @click="duplicateSel"><Copy :size="14" /> Duplicate</button>
-              <button @click="exportJson"><Download :size="14" /> Export JSON</button>
-              <button @click="pickImport"><Upload :size="14" /> Import JSON</button>
-              <button @click="exportPng"><ImageIcon :size="14" /> Export PNG</button>
-              <button :class="{ on: dark }" @click="dark = !dark"><Moon :size="14" /> Dark mode</button>
+              <button @click="saveLayout"><Save :size="14" /> {{ t('builder.saveLayout') }}</button>
+              <button :disabled="!currentName" @click="deleteLayout"><Trash2 :size="14" /> {{ t('builder.deleteLayoutBtn') }}</button>
+              <button :disabled="!canUndo" @click="undo"><Undo2 :size="14" /> {{ t('builder.undo') }}</button>
+              <button :disabled="!canRedo" @click="redo"><Redo2 :size="14" /> {{ t('builder.redo') }}</button>
+              <button :disabled="!sel.id || mode === 'run'" @click="duplicateSel"><Copy :size="14" /> {{ t('builder.duplicate') }}</button>
+              <button @click="exportJson"><Download :size="14" /> {{ t('builder.exportJson') }}</button>
+              <button @click="pickImport"><Upload :size="14" /> {{ t('builder.importJson') }}</button>
+              <button @click="exportPng"><ImageIcon :size="14" /> {{ t('builder.exportPng') }}</button>
+              <button :class="{ on: dark }" @click="dark = !dark"><Moon :size="14" /> {{ t('builder.darkMode') }}</button>
             </div>
           </div>
           <input ref="fileInput" type="file" accept="application/json,.json" style="display:none" @change="importJson">
-          <button class="pill iconOnly" :class="{ on: inspectorOpen }" title="Inspector" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="16" /></button>
+          <button class="pill iconOnly" :class="{ on: inspectorOpen }" :title="t('builder.inspector')" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="16" /></button>
         </div>
       </header>
       <div class="drawer-backdrop" :class="{ show: inspectorOpen || !railCollapsed }" @click="closeDrawers(); closeChromeMenus(); railCollapsed = true"></div>
@@ -1544,11 +1576,11 @@ onUnmounted(() => {
           <div class="covhdr" :title="c.id" @pointerdown="ctrlDragStart($event, c)">{{ c.name }}</div>
           <template v-if="c.showSlider">
             <input type="range" min="0" max="100" :value="c.pct" @input="onCtrlSlide(c, $event.target.value)">
-            <div class="covval">{{ c.pct }}% open</div>
+            <div class="covval">{{ t('builder.pctOpen', { pct: c.pct }) }}</div>
           </template>
           <div v-if="c.showOpen || c.showClose" class="covbtns">
-            <button v-if="c.showOpen" class="open" @click="setOpenClose(c.id, true)">open</button>
-            <button v-if="c.showClose" class="close" @click="setOpenClose(c.id, false)">close</button>
+            <button v-if="c.showOpen" class="open" @click="setOpenClose(c.id, true)">{{ t('builder.openBtn') }}</button>
+            <button v-if="c.showClose" class="close" @click="setOpenClose(c.id, false)">{{ t('builder.closeBtn') }}</button>
           </div>
         </div>
         <!-- on-canvas live charts: header drags/selects + fullscreen; body shows chart.js tooltips -->
@@ -1556,7 +1588,7 @@ onUnmounted(() => {
              :style="{ left: (c.x * scale) + 'px', top: (c.y * scale) + 'px', width: (c.w * scale) + 'px', height: (c.h * scale) + 'px' }">
           <div class="chdr" :title="c.id" @pointerdown="ctrlDragStart($event, c)">
             <span class="chname">{{ c.name }}</span>
-            <button class="fsbtn" title="Fullscreen" @pointerdown.stop @click="fsChart = c.id">⛶</button>
+            <button class="fsbtn" :title="t('builder.fullscreen')" @pointerdown.stop @click="fsChart = c.id">⛶</button>
           </div>
           <div class="chbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
         </div>
@@ -1564,33 +1596,33 @@ onUnmounted(() => {
         <div v-for="a in alarmsUi" :key="a.id" class="alarmbadge" :style="{ left: (a.x * scale - 6) + 'px', top: (a.y * scale - 18) + 'px' }">⚠</div>
       </div>
       <aside class="inspector" :class="{ open: inspectorOpen }">
-        <div class="ptitle">Inspector</div>
+        <div class="ptitle">{{ t('builder.inspector') }}</div>
         <div v-if="linkSel.id" class="fields">
-          <div class="tlabel">Pipe</div>
+          <div class="tlabel">{{ t('builder.pipe') }}</div>
           <div class="pipe-swatches">
             <button v-for="p in PIPE_PRESETS" :key="p.color" class="swatch" :class="{ on: linkSel.color === p.color }"
                     :style="{ background: p.color }" :title="p.label" @click="applyPipePreset(p.color)"></button>
           </div>
-          <label>Color
+          <label>{{ t('builder.color') }}
             <input type="color" v-model="linkSel.color" @input="applyPipe">
           </label>
-          <label>Width
+          <label>{{ t('builder.width') }}
             <input type="range" min="3" max="16" v-model.number="linkSel.width" @input="applyPipe">
           </label>
-          <button class="del" @click="deletePipe">🗑 Delete pipe</button>
+          <button class="del" @click="deletePipe">🗑 {{ t('builder.deletePipe') }}</button>
         </div>
-        <div v-else-if="!sel.id" class="empty">Select a component or pipe.</div>
+        <div v-else-if="!sel.id" class="empty">{{ t('builder.selectHint') }}</div>
         <div v-else class="fields">
           <div v-if="sel.info" class="info">
-            <div class="irow"><span>Type</span><b>{{ sel.info.type }}</b></div>
+            <div class="irow"><span>{{ t('common.type') }}</span><b>{{ sel.info.type }}</b></div>
             <div v-for="f in sel.info.fields" :key="f.l" class="irow"><span>{{ f.l }}</span><b class="ival">{{ f.v }}</b></div>
-            <div class="irow"><span>ID</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
+            <div class="irow"><span>{{ t('common.id') }}</span><code class="iid" :title="sel.info.id">{{ sel.info.id }}</code></div>
           </div>
-          <label v-if="sel.hasName">Name
+          <label v-if="sel.hasName">{{ t('common.name') }}
             <input type="text" v-model="sel.name" @input="applyName">
           </label>
           <template v-if="sel.type !== 's.Control' && sel.type !== 's.Chart'">
-            <label>Rotate
+            <label>{{ t('builder.rotate') }}
               <input type="range" min="0" max="360" step="15" v-model.number="sel.angle" @input="applyAngle">
             </label>
             <div class="seg">
@@ -1600,49 +1632,49 @@ onUnmounted(() => {
             </div>
           </template>
           <template v-if="sel.hasRange">
-            <label>{{ sel.type === 's.PG' ? 'Min' : sel.type === 's.Well' ? 'Min m³/h' : 'Low mark %' }}
+            <label>{{ sel.type === 's.PG' ? t('builder.min') : sel.type === 's.Well' ? t('builder.minM3h') : t('builder.lowMark') }}
               <input type="number" v-model="sel.simMin" @input="applyRange">
             </label>
-            <label>{{ sel.type === 's.PG' ? 'Max' : sel.type === 's.Well' ? 'Max m³/h' : 'High mark %' }}
+            <label>{{ sel.type === 's.PG' ? t('builder.max') : sel.type === 's.Well' ? t('builder.maxM3h') : t('builder.highMark') }}
               <input type="number" v-model="sel.simMax" @input="applyRange">
             </label>
             <template v-if="sel.type === 's.PG'">
-              <label>Yellow at %
+              <label>{{ t('builder.yellowAt') }}
                 <input type="number" v-model="sel.bandYellow" @input="applyBands">
               </label>
-              <label>Red at %
+              <label>{{ t('builder.redAt') }}
                 <input type="number" v-model="sel.bandRed" @input="applyBands">
               </label>
             </template>
-            <label v-if="sel.type !== 's.Well'">Bind live tag
+            <label v-if="sel.type !== 's.Well'">{{ t('builder.bindTag') }}
               <select v-model="sel.tag" @change="applyTag">
-                <option value="">— simulated —</option>
-                <option v-for="t in tagList" :key="t.path" :value="t.path">{{ t.label }}</option>
+                <option value="">{{ t('builder.simulated') }}</option>
+                <option v-for="tt in tagList" :key="tt.path" :value="tt.path">{{ tt.label }}</option>
               </select>
             </label>
           </template>
           <label v-if="sel.isPump" class="chk">
-            <input type="checkbox" v-model="sel.on" @change="togglePumpInit"> Running
+            <input type="checkbox" v-model="sel.on" @change="togglePumpInit"> {{ t('builder.running') }}
           </label>
           <label v-if="sel.isValve" class="chk">
-            <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> Open
+            <input type="checkbox" v-model="sel.open" @change="toggleValveInit"> {{ t('builder.openState') }}
           </label>
           <label v-if="sel.isWell" class="chk">
-            <input type="checkbox" v-model="sel.produced" @change="applyProduced"> Takes produced water
+            <input type="checkbox" v-model="sel.produced" @change="applyProduced"> {{ t('builder.takesProduced') }}
           </label>
           <template v-if="sel.isDot">
-            <label>Watches
+            <label>{{ t('builder.watches') }}
               <select v-model="sel.dotTarget" @change="applyDotTarget">
-                <option value="">— unbound —</option>
+                <option value="">{{ t('builder.unbound') }}</option>
                 <option v-for="o in sel.dotOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
               </select>
             </label>
             <label class="chk">
-              <input type="checkbox" v-model="sel.roundDot" @change="applyDotRound"> Round dot
+              <input type="checkbox" v-model="sel.roundDot" @change="applyDotRound"> {{ t('builder.roundDot') }}
             </label>
           </template>
           <template v-if="sel.isControl">
-            <label>Open %
+            <label>{{ t('builder.openPct') }}
               <input type="range" min="0" max="100" v-model.number="sel.pct" @input="applyPct">
             </label>
             <div class="pctstep">
@@ -1651,26 +1683,26 @@ onUnmounted(() => {
               <button @click="stepPct(10)">+</button>
             </div>
             <div class="ctrlbtns">
-              <button class="open" @click="controlOpen">Open</button>
-              <button class="close" @click="controlClose">Close</button>
+              <button class="open" @click="controlOpen">{{ t('builder.ctrlOpen') }}</button>
+              <button class="close" @click="controlClose">{{ t('builder.ctrlClose') }}</button>
             </div>
             <div class="targets">
-              <div class="tlabel">Show on canvas:</div>
-              <label class="chk"><input type="checkbox" v-model="sel.showSlider" @change="applyCtrlUi"> Slider</label>
-              <label class="chk"><input type="checkbox" v-model="sel.showOpen" @change="applyCtrlUi"> Open button</label>
-              <label class="chk"><input type="checkbox" v-model="sel.showClose" @change="applyCtrlUi"> Close button</label>
+              <div class="tlabel">{{ t('builder.showOnCanvas') }}</div>
+              <label class="chk"><input type="checkbox" v-model="sel.showSlider" @change="applyCtrlUi"> {{ t('builder.slider') }}</label>
+              <label class="chk"><input type="checkbox" v-model="sel.showOpen" @change="applyCtrlUi"> {{ t('builder.openButton') }}</label>
+              <label class="chk"><input type="checkbox" v-model="sel.showClose" @change="applyCtrlUi"> {{ t('builder.closeButton') }}</label>
             </div>
             <div class="targets">
-              <div class="tlabel">Controls (linked):</div>
-              <div v-if="!sel.targetOptions.length" class="empty">Add pumps/valves to link.</div>
+              <div class="tlabel">{{ t('builder.controlsLinked') }}</div>
+              <div v-if="!sel.targetOptions.length" class="empty">{{ t('builder.addTargetsHint') }}</div>
               <label v-for="o in sel.targetOptions" :key="o.id" class="chk">
                 <input type="checkbox" :checked="sel.targets.includes(o.id)" @change="toggleTarget(o.id, $event.target.checked)"> {{ o.name }}
               </label>
             </div>
           </template>
           <div v-if="sel.type !== 's.Chart'" class="targets">
-            <div class="tlabel">Connections:</div>
-            <div v-if="!sel.connections.length" class="empty">Not connected.</div>
+            <div class="tlabel">{{ t('builder.connections') }}</div>
+            <div v-if="!sel.connections.length" class="empty">{{ t('builder.notConnected') }}</div>
             <div v-for="cn in sel.connections" :key="cn.key" class="conn">
               <div class="crow"><span class="cdir">{{ cn.dir }}</span> <b class="cname">{{ cn.name }}</b> <span class="cval">{{ cn.value }}</span></div>
               <code class="iid" :title="cn.id">{{ cn.id }}</code>
@@ -1678,15 +1710,15 @@ onUnmounted(() => {
           </div>
           <!-- style (solid-fill shapes + custom) -->
           <div v-if="sel.hasStyle" class="targets">
-            <div class="tlabel">Style</div>
+            <div class="tlabel">{{ t('builder.style') }}</div>
             <div class="frow">
-              <label>Fill<input type="color" v-model="sel.fillC" @input="applyStyle"></label>
-              <label>Border<input type="color" v-model="sel.borderC" @input="applyStyle"></label>
+              <label>{{ t('builder.fill') }}<input type="color" v-model="sel.fillC" @input="applyStyle"></label>
+              <label>{{ t('builder.border') }}<input type="color" v-model="sel.borderC" @input="applyStyle"></label>
             </div>
           </div>
           <!-- geometry + z-order + lock -->
           <div class="targets">
-            <div class="tlabel">Geometry</div>
+            <div class="tlabel">{{ t('builder.geometry') }}</div>
             <div class="frow">
               <label>X<input type="number" v-model.number="sel.x" @input="applyPos"></label>
               <label>Y<input type="number" v-model.number="sel.y" @input="applyPos"></label>
@@ -1696,18 +1728,18 @@ onUnmounted(() => {
               <label>H<input type="number" v-model.number="sel.h" @input="applySize"></label>
             </div>
             <div class="seg">
-              <button @click="toBack">⤓ Back</button>
-              <button @click="toFront">⤒ Front</button>
+              <button @click="toBack">⤓ {{ t('builder.back') }}</button>
+              <button @click="toFront">⤒ {{ t('builder.front') }}</button>
             </div>
-            <label class="chk lockrow"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> <LockIcon :size="13" /> Lock position</label>
+            <label class="chk lockrow"><input type="checkbox" v-model="sel.locked" @change="toggleLock"> <LockIcon :size="13" /> {{ t('builder.lockPosition') }}</label>
           </div>
           <!-- notes + tag -->
           <div class="targets">
-            <div class="tlabel">Notes</div>
-            <label>Tag<input type="text" v-model="sel.devtag" @input="applyDevtag" placeholder="PMP-101"></label>
-            <textarea v-model="sel.note" @input="applyNote" rows="2" placeholder="Notes…"></textarea>
+            <div class="tlabel">{{ t('builder.notes') }}</div>
+            <label>{{ t('builder.tag') }}<input type="text" v-model="sel.devtag" @input="applyDevtag" placeholder="PMP-101"></label>
+            <textarea v-model="sel.note" @input="applyNote" rows="2" :placeholder="t('builder.notesPlaceholder')"></textarea>
           </div>
-          <button v-if="mode === 'edit'" class="del" @click="deleteSel">🗑 Delete</button>
+          <button v-if="mode === 'edit'" class="del" @click="deleteSel">🗑 {{ t('common.delete') }}</button>
         </div>
       </aside>
     </div>
@@ -1717,8 +1749,8 @@ onUnmounted(() => {
     <div v-if="fsChart" class="fsmodal" @click.self="fsChart = null">
       <div class="fsinner">
         <div class="fshead">
-          <b>{{ (chartsUi.find(c => c.id === fsChart) || {}).name || 'Chart' }} — Tank capacity</b>
-          <button @click="fsChart = null">✕ Close</button>
+          <b>{{ (chartsUi.find(c => c.id === fsChart) || {}).name || t('builder.chartDefault') }} — {{ t('builder.tankCapacity') }}</b>
+          <button @click="fsChart = null">✕ {{ t('common.close') }}</button>
         </div>
         <div class="fsbody"><TrendChart :series="tankSeries()" style="width:100%;height:100%" /></div>
       </div>
@@ -1729,24 +1761,24 @@ onUnmounted(() => {
     <aside v-if="aiComp.open" class="aipanel">
       <div class="aihead">
         <span class="aihead-ic"><Sparkles :size="16" /></span>
-        <div class="aihead-t"><b>AI Component</b><span>Describe a part — get a realistic live component</span></div>
+        <div class="aihead-t"><b>{{ t('builder.aiComponent') }}</b><span>{{ t('builder.aiSubtitle') }}</span></div>
         <button class="aiclose" @click="aiComp.open = false"><X :size="15" /></button>
       </div>
       <div class="aipanelbody">
-        <div class="ailabel">Describe your component</div>
+        <div class="ailabel">{{ t('builder.describeAi') }}</div>
         <textarea v-model="aiComp.prompt" rows="4" class="aita" :disabled="aiComp.loading"
-                  placeholder="e.g. a chlorine dosing pump with on/off state, or a pressure sensor reading 0–10 bar"
+                  :placeholder="t('builder.aiPlaceholder')"
                   @keydown.enter.exact.prevent="generateAiComp"></textarea>
         <template v-if="!aiComp.result && !aiComp.loading">
-          <div class="ailabel">Try one of these</div>
+          <div class="ailabel">{{ t('builder.aiTryThese') }}</div>
           <div class="aichips">
             <button v-for="ex in AI_EXAMPLES" :key="ex" class="aichip" @click="aiComp.prompt = ex">{{ ex }}</button>
           </div>
         </template>
         <div v-if="aiComp.error" class="aierr">{{ aiComp.error }}</div>
-        <div v-if="aiComp.loading" class="aiload"><span class="aispin"></span> Generating component…</div>
+        <div v-if="aiComp.loading" class="aiload"><span class="aispin"></span> {{ t('builder.aiGeneratingComp') }}</div>
         <template v-if="aiComp.result">
-          <div class="ailabel">Preview</div>
+          <div class="ailabel">{{ t('builder.aiPreview') }}</div>
           <div class="aiprev">
             <div class="aiprevstage">
               <img v-if="aiComp.result.svg" class="aiprevsvg" :src="svgDataUri(aiComp.result.svg)" alt="">
@@ -1761,18 +1793,18 @@ onUnmounted(() => {
             <div class="aiprevmeta">
               <b>{{ aiComp.result.label }}</b>
               <div class="aitags">
-                <span class="aitag">{{ aiComp.result.behavior }}</span>
+                <span class="aitag">{{ aiBehLabel(aiComp.result.behavior) }}</span>
                 <span v-if="aiComp.result.behavior === 'meter'" class="aitag">{{ aiComp.result.vmin }}–{{ aiComp.result.vmax }} {{ aiComp.result.unit }}</span>
-                <span class="aitag">ports: {{ Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none' }}</span>
+                <span class="aitag">{{ t('builder.aiPorts', { ports: Object.entries(aiComp.result.sides).filter(([, v]) => v).map(([k]) => k).join(', ') || t('builder.aiNone') }) }}</span>
               </div>
             </div>
           </div>
         </template>
         <div class="aiactions">
           <button class="aigen" :disabled="aiComp.loading || !aiComp.prompt.trim()" @click="generateAiComp">
-            <Sparkles :size="14" /> {{ aiComp.loading ? 'Generating…' : (aiComp.result ? 'Regenerate' : 'Generate') }}
+            <Sparkles :size="14" /> {{ aiComp.loading ? t('builder.aiGenerating') : (aiComp.result ? t('builder.aiRegenerate') : t('builder.aiGenerate')) }}
           </button>
-          <button v-if="aiComp.result" class="aiadd" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" /> Add to My Components</button>
+          <button v-if="aiComp.result" class="aiadd" :disabled="aiComp.loading" @click="saveAiComp"><Plus :size="14" /> {{ t('builder.aiAdd') }}</button>
         </div>
       </div>
     </aside>
@@ -1789,7 +1821,7 @@ onUnmounted(() => {
           <input v-if="dlg.mode === 'prompt'" ref="dlgInput" type="text" v-model="dlg.value" @keyup.enter="dlgOk" class="cdlg-input">
         </div>
         <div class="cdlg-actions">
-          <button v-if="dlg.mode !== 'alert'" class="cdlg-cancel" @click="dlgCancel">Cancel</button>
+          <button v-if="dlg.mode !== 'alert'" class="cdlg-cancel" @click="dlgCancel">{{ t('common.cancel') }}</button>
           <button class="cdlg-ok" :class="{ danger: dlg.danger }" @click="dlgOk">{{ dlg.okText }}</button>
         </div>
       </div>
@@ -1887,6 +1919,8 @@ onUnmounted(() => {
 .dropdown button.on { background: var(--accent); color: #fff; }
 .dropdown select { border: 1px solid var(--border); background-color: var(--surface); color: var(--text); padding-right: 28px; }
 .pagehead { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.lang-btn { flex: none; font-size: 12px; font-weight: 700; line-height: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-elevated); color: var(--text); cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.lang-btn:hover { border-color: var(--accent); color: var(--accent); }
 .currentname { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pagehead-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--accent); white-space: nowrap; }
 .toolbar { display: flex; align-items: center; gap: 6px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: var(--text); }
